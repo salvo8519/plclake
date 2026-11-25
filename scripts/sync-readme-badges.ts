@@ -131,23 +131,28 @@ function makeBadge(label: string, message: string, color: string, logo?: string)
   return `https://img.shields.io/badge/${pathPart}?${params.toString()}`;
 }
 
+function makeBadgeImg(alt: string, label: string, message: string, color: string, logo?: string): string {
+  const url = makeBadge(label, message, color, logo);
+  return `<img src="${url}" alt="${alt}" />`;
+}
+
 export function buildBadgesBlock(lang: SupportedLanguage, metrics: CodeMetrics = collectCodeMetrics()): string {
   const isIt = lang === 'it';
 
   const row1 = [
-    `![Release](${makeBadge(isIt ? 'Versione' : 'Release', `v${metrics.appVersion}`, GOLD)})`,
-    `![OpenAPI](${makeBadge('OpenAPI', `${metrics.openapiVersion} · ${metrics.endpointCount} endpoints`, NAVY_MID, 'openapiinitiative')})`,
-    `![i18n](${makeBadge('i18n', `EN | IT · ${metrics.i18nKeyCount} ${isIt ? 'chiavi' : 'keys'}`, GOLD, 'i18next')})`,
-    `![Docs](${makeBadge(isIt ? 'Docs Zensical' : 'Zensical Docs', `${metrics.bilingualDocPages}×2 ${isIt ? 'pagine EN/IT' : 'EN/IT pages'}`, NAVY_MID)})`,
-    `![CI Gate](${makeBadge(isIt ? 'Gate CI' : 'CI Gate', metrics.hasCiWorkflow && metrics.hasDocsWorkflow ? 'Biome · Ruff · Vitest · i18n' : 'Local', EMERALD, 'gitlab')})`,
+    makeBadgeImg('Release', isIt ? 'Versione' : 'Release', `v${metrics.appVersion}`, GOLD),
+    makeBadgeImg('OpenAPI', 'OpenAPI', `${metrics.openapiVersion} · ${metrics.endpointCount} endpoints`, NAVY_MID, 'openapiinitiative'),
+    makeBadgeImg('i18n', 'i18n', `EN | IT · ${metrics.i18nKeyCount} ${isIt ? 'chiavi' : 'keys'}`, GOLD, 'i18next'),
+    makeBadgeImg('Docs', isIt ? 'Docs Zensical' : 'Zensical Docs', `${metrics.bilingualDocPages}×2 ${isIt ? 'pagine EN/IT' : 'EN/IT pages'}`, NAVY_MID),
+    makeBadgeImg('CI Gate', isIt ? 'Gate CI' : 'CI Gate', metrics.hasCiWorkflow && metrics.hasDocsWorkflow ? 'ESLint · Biome · Ruff · Vitest' : 'Local', EMERALD, 'githubactions'),
   ];
 
   const row2 = [
-    `![React](${makeBadge('React', metrics.reactVersion, NAVY_MID, 'react')})`,
-    `![TypeScript](${makeBadge('TypeScript', metrics.typescriptVersion, NAVY_MID, 'typescript')})`,
-    `![Express](${makeBadge('Express', metrics.expressVersion, NAVY_MID, 'express')})`,
-    `![i18next](${makeBadge('i18next', metrics.i18nextVersion, GOLD)})`,
-    `![Security](${makeBadge(isIt ? 'Sicurezza' : 'Security', 'RBAC · AES-256-GCM · scrypt', EMERALD)})`,
+    makeBadgeImg('React', 'React', metrics.reactVersion, NAVY_MID, 'react'),
+    makeBadgeImg('TypeScript', 'TypeScript', metrics.typescriptVersion, NAVY_MID, 'typescript'),
+    makeBadgeImg('Express', 'Express', metrics.expressVersion, NAVY_MID, 'express'),
+    makeBadgeImg('i18next', 'i18next', metrics.i18nextVersion, GOLD),
+    makeBadgeImg('Security', isIt ? 'Sicurezza' : 'Security', 'RBAC · AES-256-GCM · scrypt', EMERALD),
   ];
 
   return [

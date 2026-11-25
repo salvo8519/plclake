@@ -6,17 +6,17 @@
 
 <!-- BADGES:START -->
 <p align="center">
-  ![Release](https://img.shields.io/badge/Release-v1.0.0-C9A45C?style=flat-square&labelColor=0B1622)
-  ![OpenAPI](https://img.shields.io/badge/OpenAPI-3.1.0%20%C2%B7%2051%20endpoints-16324F?style=flat-square&labelColor=0B1622&logo=openapiinitiative&logoColor=FFFFFF)
-  ![i18n](https://img.shields.io/badge/i18n-EN%20%7C%20IT%20%C2%B7%201194%20keys-C9A45C?style=flat-square&labelColor=0B1622&logo=i18next&logoColor=FFFFFF)
-  ![Docs](https://img.shields.io/badge/Zensical%20Docs-8%C3%972%20EN%2FIT%20pages-16324F?style=flat-square&labelColor=0B1622)
-  ![CI Gate](https://img.shields.io/badge/CI%20Gate-Biome%20%C2%B7%20Ruff%20%C2%B7%20Vitest%20%C2%B7%20i18n-0F6B54?style=flat-square&labelColor=0B1622&logo=gitlab&logoColor=FFFFFF)
+  <img src="https://img.shields.io/badge/Release-v1.0.0-C9A45C?style=flat-square&labelColor=0B1622" alt="Release" />
+  <img src="https://img.shields.io/badge/OpenAPI-3.1.0%20%C2%B7%2051%20endpoints-16324F?style=flat-square&labelColor=0B1622&logo=openapiinitiative&logoColor=FFFFFF" alt="OpenAPI" />
+  <img src="https://img.shields.io/badge/i18n-EN%20%7C%20IT%20%C2%B7%201194%20keys-C9A45C?style=flat-square&labelColor=0B1622&logo=i18next&logoColor=FFFFFF" alt="i18n" />
+  <img src="https://img.shields.io/badge/Zensical%20Docs-8%C3%972%20EN%2FIT%20pages-16324F?style=flat-square&labelColor=0B1622" alt="Docs" />
+  <img src="https://img.shields.io/badge/CI%20Gate-ESLint%20%C2%B7%20Biome%20%C2%B7%20Ruff%20%C2%B7%20Vitest-0F6B54?style=flat-square&labelColor=0B1622&logo=githubactions&logoColor=FFFFFF" alt="CI Gate" />
   <br />
-  ![React](https://img.shields.io/badge/React-19.0.1-16324F?style=flat-square&labelColor=0B1622&logo=react&logoColor=FFFFFF)
-  ![TypeScript](https://img.shields.io/badge/TypeScript-6.0.3-16324F?style=flat-square&labelColor=0B1622&logo=typescript&logoColor=FFFFFF)
-  ![Express](https://img.shields.io/badge/Express-4.21.2-16324F?style=flat-square&labelColor=0B1622&logo=express&logoColor=FFFFFF)
-  ![i18next](https://img.shields.io/badge/i18next-27.2.6-C9A45C?style=flat-square&labelColor=0B1622)
-  ![Security](https://img.shields.io/badge/Security-RBAC%20%C2%B7%20AES--256--GCM%20%C2%B7%20scrypt-0F6B54?style=flat-square&labelColor=0B1622)
+  <img src="https://img.shields.io/badge/React-19.0.1-16324F?style=flat-square&labelColor=0B1622&logo=react&logoColor=FFFFFF" alt="React" />
+  <img src="https://img.shields.io/badge/TypeScript-6.0.3-16324F?style=flat-square&labelColor=0B1622&logo=typescript&logoColor=FFFFFF" alt="TypeScript" />
+  <img src="https://img.shields.io/badge/Express-4.21.2-16324F?style=flat-square&labelColor=0B1622&logo=express&logoColor=FFFFFF" alt="Express" />
+  <img src="https://img.shields.io/badge/i18next-27.2.6-C9A45C?style=flat-square&labelColor=0B1622" alt="i18next" />
+  <img src="https://img.shields.io/badge/Security-RBAC%20%C2%B7%20AES--256--GCM%20%C2%B7%20scrypt-0F6B54?style=flat-square&labelColor=0B1622" alt="Security" />
 </p>
 <!-- BADGES:END -->
 
