@@ -1,4 +1,4 @@
-# PLCLake - Industrial Telemetry & ML
+# PLCLake - Industrial Telemetry connector 
 
 <p align="center">
   <strong>English</strong> · <a href="README.it.md">Italiano</a>
