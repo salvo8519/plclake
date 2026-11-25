@@ -669,7 +669,7 @@ export function ApiTokensSection({
                           className={`inline-flex items-center gap-1.5 font-mono text-[11px] font-semibold uppercase ${
                             item.status === 'active'
                               ? 'text-emerald-700'
-                              : item.status === 'expired'
+                              : item.status === 'expiring_soon' || item.status === 'expired'
                               ? 'text-amber-700'
                               : 'text-slate-500'
                           }`}
@@ -678,7 +678,7 @@ export function ApiTokensSection({
                             className={`w-1.5 h-1.5 rounded-full ${
                               item.status === 'active'
                                 ? 'bg-emerald-600'
-                                : item.status === 'expired'
+                                : item.status === 'expiring_soon' || item.status === 'expired'
                                 ? 'bg-amber-500'
                                 : 'bg-slate-400'
                             }`}

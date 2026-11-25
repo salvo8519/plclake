@@ -255,6 +255,7 @@
     },
     "status": {
       "active": "Attiva",
+      "expiring_soon": "In Scadenza",
       "expired": "Scaduta",
       "revoked": "Revocata"
     },

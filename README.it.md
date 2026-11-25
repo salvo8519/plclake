@@ -3,14 +3,14 @@
 **Piattaforma di Telemetria Industriale, Edge Gateway & ML Lakehouse**
 
 <p align="center">
-  <a href="README.md">English</a> · <strong>Italiano</strong>
+  <a href="README.md">English</a> · <strong>Italiano</strong> · <a href="https://salvo8519.github.io/plclake/it/">Documentazione Live</a> · <a href="https://salvo8519.github.io/plclake/api/scalar.html?lang=it">API Interattive (Scalar)</a>
 </p>
 
 <!-- BADGES:START -->
 <p align="center">
   <img src="https://img.shields.io/badge/Versione-v1.0.0-C9A45C?style=flat-square&labelColor=0B1622" alt="Release" />
   <img src="https://img.shields.io/badge/OpenAPI-3.1.0%20%C2%B7%2051%20endpoints-16324F?style=flat-square&labelColor=0B1622" alt="OpenAPI" />
-  <img src="https://img.shields.io/badge/i18n-EN%20%7C%20IT%20%C2%B7%201202%20chiavi-C9A45C?style=flat-square&labelColor=0B1622" alt="i18n" />
+  <img src="https://img.shields.io/badge/i18n-EN%20%7C%20IT%20%C2%B7%201203%20chiavi-C9A45C?style=flat-square&labelColor=0B1622" alt="i18n" />
   <img src="https://img.shields.io/badge/Docs%20Zensical-8%C3%972%20pagine%20EN%2FIT-16324F?style=flat-square&labelColor=0B1622" alt="Docs" />
   <img src="https://img.shields.io/badge/Gate%20CI-ESLint%20%C2%B7%20Biome%20%C2%B7%20Ruff%20%C2%B7%20Vitest-0F6B54?style=flat-square&labelColor=0B1622" alt="CI Gate" />
   <br />
@@ -57,7 +57,7 @@ flowchart LR
 
 ![PLCLake Streaming Telemetrico Live](docs/assets/screenshots/00-live-stream-demo-it.gif)
 
-### Le 4 Viste Principali
+### Operazioni, Connessioni Impianto & Configurazione Pipeline
 
 <table>
   <tr>
@@ -65,27 +65,60 @@ flowchart LR
       <a href="docs/assets/screenshots/01-live-console-it.png"><img src="docs/assets/screenshots/01-live-console-it.png" alt="PLCLake Console Operativa Live" width="100%" /></a>
       <br />
       <strong>1. Console Operativa Live</strong><br />
-      Indicatori KPI in tempo reale, quarantena anomalie e ispezione eventi JSON.
+      Indicatori KPI in tempo reale, stato di salute della pipeline, quarantena anomalie e ispezione eventi JSON.
     </td>
     <td width="50%" valign="top">
-      <a href="docs/assets/screenshots/02-plc-catalog-it.png"><img src="docs/assets/screenshots/02-plc-catalog-it.png" alt="PLCLake Catalogo Dinamico PLC" width="100%" /></a>
+      <a href="docs/assets/screenshots/05-plant-connections-it.png"><img src="docs/assets/screenshots/05-plant-connections-it.png" alt="PLCLake Connessioni Impianto ed Edge Gateway" width="100%" /></a>
       <br />
-      <strong>2. Catalogo Dinamico PLC</strong><br />
-      Configura macchinari Siemens, Rockwell, CNC, Gas ed Energia, protocolli e soglie.
+      <strong>2. Connessioni Impianto &amp; Edge Gateway</strong><br />
+      Connetti macchine e contatori via OPC-UA, Modbus TCP, MQTT Sparkplug o VPN/LAN con buffer offline SQLite e kit di installazione on-premise generato in un clic.
     </td>
   </tr>
   <tr>
     <td width="50%" valign="top">
-      <a href="docs/assets/screenshots/03-rbac-roles-it.png"><img src="docs/assets/screenshots/03-rbac-roles-it.png" alt="PLCLake Ruoli e Permessi" width="100%" /></a>
+      <a href="docs/assets/screenshots/02-plc-catalog-it.png"><img src="docs/assets/screenshots/02-plc-catalog-it.png" alt="PLCLake Catalogo Dinamico PLC" width="100%" /></a>
       <br />
-      <strong>3. Accessi e Permessi (RBAC)</strong><br />
-      Gestisci viste e permessi per <code>Admin</code>, <code>Operatore</code> e <code>Visualizzatore</code>.
+      <strong>3. Catalogo Dinamico PLC</strong><br />
+      Configura macchinari Siemens, Rockwell, CNC, Gas ed Energia, protocolli, soglie di guasto e formule KPI senza scrivere codice.
     </td>
     <td width="50%" valign="top">
-      <a href="docs/assets/screenshots/04-api-docs-it.png"><img src="docs/assets/screenshots/04-api-docs-it.png" alt="PLCLake Portale API OpenAPI 3.1" width="100%" /></a>
+      <a href="docs/assets/screenshots/06-job-config-it.png"><img src="docs/assets/screenshots/06-job-config-it.png" alt="PLCLake Configurazione Job e Policy Lakehouse" width="100%" /></a>
       <br />
-      <strong>4. Portale API OpenAPI 3.1</strong><br />
-      Esplora e testa tutti i 51 endpoint tipizzati con autenticazione e docs <code>IT | EN</code>.
+      <strong>4. Configurazione Job &amp; Lakehouse Hot/Cold</strong><br />
+      Imposta finestre di aggregazione, lookback watermark, policy di quarantena, SLA anomalie e retention tra PostgreSQL Hot e Parquet S3 Cold.
+    </td>
+  </tr>
+</table>
+
+### Sicurezza, Governance & Portale API
+
+<table>
+  <tr>
+    <td width="50%" valign="top">
+      <a href="docs/assets/screenshots/03-rbac-roles-it.png"><img src="docs/assets/screenshots/03-rbac-roles-it.png" alt="PLCLake Ruoli e Permessi" width="100%" /></a>
+      <br />
+      <strong>5. Accessi e Permessi (RBAC)</strong><br />
+      Gestisci visibilità delle viste e permessi operativi per <code>Admin</code>, <code>Operatore</code> e <code>Visualizzatore</code> da un'unica matrice.
+    </td>
+    <td width="50%" valign="top">
+      <a href="docs/assets/screenshots/07-api-tokens-it.png"><img src="docs/assets/screenshots/07-api-tokens-it.png" alt="PLCLake Gestione Token e Chiavi API" width="100%" /></a>
+      <br />
+      <strong>6. Token API &amp; Ciclo di Vita Chiavi</strong><br />
+      Emetti, ruota e revoca credenziali <code>X-API-Key</code> con scope dedicati (<code>read</code>, <code>edge</code>, <code>admin</code>), avvisi di scadenza e cifratura AES-256-GCM.
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top">
+      <a href="docs/assets/screenshots/08-audit-log-it.png"><img src="docs/assets/screenshots/08-audit-log-it.png" alt="PLCLake Registro Audit Immutabile" width="100%" /></a>
+      <br />
+      <strong>7. Registro Audit Sicurezza e Operazioni</strong><br />
+      Traccia ogni accesso, emissione o rotazione di chiavi, modifica RBAC e configurazione con Attore, Esito, ID Richiesta ed export CSV.
+    </td>
+    <td width="50%" valign="top">
+      <a href="https://salvo8519.github.io/plclake/api/scalar.html?lang=it"><img src="docs/assets/screenshots/04-api-docs-it.png" alt="PLCLake Portale API OpenAPI 3.1" width="100%" /></a>
+      <br />
+      <strong>8. Portale API OpenAPI 3.1 (<a href="https://salvo8519.github.io/plclake/api/scalar.html?lang=it">Apri Scalar Live</a>)</strong><br />
+      Esplora e testa tutti i 51 endpoint tipizzati direttamente dal browser con autenticazione integrata e documentazione <code>IT | EN</code>.
     </td>
   </tr>
 </table>
@@ -94,21 +127,21 @@ flowchart LR
 
 ## Funzionalità Principali
 
-- **Console Operativa & Simulazione Live**: monitora i flussi telemetrici in tempo reale, ispeziona l'intero payload JSON di ogni evento, isola automaticamente i dati anomali in quarantena e valuta lo stato della flotta.
-- **Catalogo PLC Dinamico & Connessioni Impianto**: configura macchine industriali (Siemens, Rockwell, CNC, Gas, Energia) con canali personalizzati, test di raggiungibilità e sincronizzazione automatica con l'Edge Gateway.
-- **Sicurezza, Ruoli & Tracciabilità**: gestione separata di Utenti e Ruoli (`Admin`, `Operator`, `Viewer`), chiavi API gestite con scadenza e rotazione, segreti cifrati a riposo e registro Audit immutabile su tutte le modifiche.
-- **Nativamente Bilingue (`IT | EN`)**: console web, portale API interattivo e manuali tecnici sono sincronizzati 1:1 in Italiano e Inglese.
-- **Pronto per la Produzione**: versione centralizzata (`config/app.json` + `/api/v1/version`), immagine Docker non-root, pacchetto on-premise chiavi in mano, Helm Chart per k3s/Kubernetes e pipeline CI/CD automatiche.
+- **Console Operativa & Simulazione Live**: monitora i flussi telemetrici in tempo reale, lo stato di salute della pipeline (`Stabile`, `Degradata`, `Critica`), i payload JSON completi, i dati in quarantena e lo stato della flotta.
+- **Connessioni Impianto & Edge Gateway**: integra PLC e contatori industriali via **OPC-UA**, **Modbus TCP**, **MQTT Sparkplug** o **HTTP/REST** in LAN diretta, VPN Site-to-Site o tramite Edge Gateway con buffer offline SQLite e generazione automatica del kit di installazione on-premise.
+- **Catalogo PLC Dinamico & Configurazione Job**: definisci nuove famiglie di macchine (Siemens, Rockwell, CNC, Gas, Energia) e regola da interfaccia finestre di aggregazione, watermark, policy di quarantena e retention Hot/Cold.
+- **Sicurezza, Token API & Registro Audit Immutabile**: gestione separata di Utenti e Ruoli (`Admin`, `Operatore`, `Visualizzatore`), chiavi `X-API-Key` con scope dedicati (`read`, `edge`, `admin`), scadenza e rotazione automatica, segreti cifrati a riposo e registro Audit esportabile in CSV.
+- **Nativamente Bilingue (`IT | EN`) & Pronto per la Produzione**: console web, portale API Scalar live, sito documentazione Zensical, immagine Docker non-root, pacchetto on-premise chiavi in mano e Helm Chart per k3s/Kubernetes.
 
 ---
 
 ## Punti Chiave Architetturali (Per Team Tecnici)
 
 - **Zero Over-Engineering**: PostgreSQL 16 + PgBouncer per query operative istantanee ("Hot") abbinato ad archivio compresso Parquet su S3 ("Cold") — nessun cluster Kafka o Spark da mantenere in stabilimento.
-- **API Contract-First**: 51 endpoint OpenAPI 3.1 generati direttamente da schemi Zod, con validazione a due livelli (`permissive` per resilienza in fabbrica, `strict` per integrazioni enterprise) e portale interattivo Scalar.
+- **API Contract-First**: 51 endpoint OpenAPI 3.1 generati direttamente da schemi Zod, con validazione a due livelli (`permissive` per resilienza in fabbrica, `strict` per integrazioni enterprise) e [Portale Interattivo Scalar OpenAPI 3.1](https://salvo8519.github.io/plclake/api/scalar.html?lang=it).
 - **Osservabilità Nativa**: endpoint `/healthz`, `/readyz`, `/api/v1/version`, metriche Prometheus `/metrics`, log JSON strutturati con redaction dei segreti e dashboard Grafana preconfigurate.
 
-Tutti gli approfondimenti tecnici sono raccolti nell'[Hub Documentazione](docs/index.md).
+Tutti gli approfondimenti tecnici sono pubblicati sul **[Sito Documentazione Live](https://salvo8519.github.io/plclake/it/)** e raccolti nell'[Hub Documentazione](docs/index.md).
 
 ---
 
@@ -145,9 +178,13 @@ Per il rilascio su server cliente o ambienti Staging/Produzione:
 
 ---
 
-## Documentazione
+## Documentazione & Portale API Live
 
-Tutta la documentazione tecnica è rispecchiata 1:1 in Italiano e Inglese:
+Esplora subito online senza installare nulla:
+- **[Portale Documentazione Live (IT)](https://salvo8519.github.io/plclake/it/)** · **[Live Documentation Portal (EN)](https://salvo8519.github.io/plclake/en/)**
+- **[Portale API Interattivo Live — Scalar OpenAPI 3.1 (IT)](https://salvo8519.github.io/plclake/api/scalar.html?lang=it)** · **[Scalar OpenAPI 3.1 (EN)](https://salvo8519.github.io/plclake/api/scalar.html?lang=en)**
+
+Documentazione nel repository (rispecchiata 1:1 in Italiano e Inglese):
 
 - **[Hub Documentazione (IT / EN)](docs/index.md)**
 - **[Topologia OT/IT & Edge Gateway](docs/it/architecture/ot-it-topology.md)**
