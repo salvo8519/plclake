@@ -1,0 +1,38 @@
+# Dependencies & build artifacts
+node_modules
+dist
+dist-server
+site
+public_pages
+coverage
+
+# Local state & secrets
+.state
+.env
+.env.*
+!.env.example
+
+# VCS, IDE & tooling metadata
+.git
+.gitignore
+.github
+.gitlab-ci.yml
+.husky
+.aistudio
+workspace
+.eslintcache
+*.tsbuildinfo
+.DS_Store
+*.log
+
+# Documentation, deploy manifests, tests & Python edge sub-repo
+deploy
+docs
+tests
+project_repo
+monitoring
+.venv
+__pycache__
+*.pyc
+.pytest_cache
+.ruff_cache

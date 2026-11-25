@@ -1,0 +1,209 @@
+services:
+  rustfs:
+    image: rustfs/rustfs:latest
+    container_name: machine-rustfs
+    environment:
+      RUSTFS_ACCESS_KEY: ${RUSTFS_ACCESS_KEY:-rustfsadmin}
+      RUSTFS_SECRET_KEY: ${RUSTFS_SECRET_KEY:-rustfsadmin}
+      RUSTFS_VOLUMES: /data
+      RUSTFS_ADDRESS: ":9000"
+      RUSTFS_CONSOLE_ADDRESS: ":9001"
+      RUSTFS_CONSOLE_ENABLE: "true"
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - rustfs_data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:9000/health || wget -qO- http://localhost:9000/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  garage-cold:
+    image: dxflrs/garage:v1.0.1
+    container_name: machine-garage-cold
+    ports:
+      - "3900:3900"
+      - "3903:3903"
+    volumes:
+      - garage_cold_data:/var/lib/garage/data
+    environment:
+      GARAGE_RPC_SECRET: ${GARAGE_RPC_SECRET:-4d3f1d8c9a2b7e6f0c1d2e3f4a5b6c7d8e9f0a1b2c3d4e5f6a7b8c9d0e1f2a3b}
+      GARAGE_ALLOW_WORLD_READABLE_SECRETS: "true"
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: machine-postgres
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-mlops}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-mlops}
+      POSTGRES_DB: ${POSTGRES_DB:-machine_logs}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./deploy/postgres/init.sql:/docker-entrypoint-initdb.d/01_init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-mlops} -d ${POSTGRES_DB:-machine_logs}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  loki:
+    image: grafana/loki:3.2.0
+    container_name: machine-loki
+    ports:
+      - "3100:3100"
+    volumes:
+      - loki_data:/loki
+    command: -config.file=/etc/loki/local-config.yaml
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3100/ready || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  alloy:
+    image: grafana/alloy:v1.5.1
+    container_name: machine-alloy
+    ports:
+      - "12345:12345"
+    volumes:
+      - ./deploy/alloy/config.alloy:/etc/alloy/config.alloy:ro
+      - logs_data:/var/log/machines:ro
+    command: run --server.http.listen-addr=0.0.0.0:12345 --storage.path=/var/lib/alloy/data /etc/alloy/config.alloy
+    depends_on:
+      loki:
+        condition: service_healthy
+
+  grafana:
+    image: grafana/grafana:11.3.0
+    container_name: machine-grafana
+    ports:
+      - "3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GF_SECURITY_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GF_SECURITY_ADMIN_PASSWORD:-admin}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    volumes:
+      - ./deploy/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./deploy/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana_data:/var/lib/grafana
+    depends_on:
+      loki:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+
+  mailpit:
+    image: axllent/mailpit:latest
+    container_name: machine-mailpit
+    restart: unless-stopped
+    ports:
+      - "1025:1025"
+      - "8025:8025"
+    environment:
+      MP_MAX_MESSAGES: "5000"
+      MP_SMTP_AUTH_ACCEPT_ANY: "1"
+      MP_SMTP_AUTH_ALLOW_INSECURE: "1"
+
+  simulator:
+    build:
+      context: ./src
+      dockerfile: Dockerfile
+    container_name: machine-simulator
+    command:
+      [
+        "python",
+        "-m",
+        "simulator.main",
+        "--rate-hz",
+        "${SIM_RATE_HZ:-2.0}",
+        "--rotate-max-lines",
+        "${SIM_ROTATE_MAX_LINES:-2000}",
+        "--out-dir",
+        "/var/log/machines",
+        "--upload-s3"
+      ]
+    environment:
+      ENV: ${ENV:-local}
+      SERVICE_NAME: ${SERVICE_NAME:-machine-simulator}
+      S3_ENDPOINT: http://rustfs:9000
+      S3_ACCESS_KEY: ${RUSTFS_ACCESS_KEY:-rustfsadmin}
+      S3_SECRET_KEY: ${RUSTFS_SECRET_KEY:-rustfsadmin}
+      S3_RAW_BUCKET: ${S3_RAW_BUCKET:-machine-raw}
+      S3_QUARANTINE_BUCKET: ${S3_QUARANTINE_BUCKET:-machine-quarantine}
+    volumes:
+      - logs_data:/var/log/machines
+    depends_on:
+      rustfs:
+        condition: service_healthy
+
+  dataset-builder:
+    build:
+      context: ./src
+      dockerfile: Dockerfile
+    container_name: machine-dataset-builder
+    command:
+      [
+        "python",
+        "-m",
+        "dataset_builder.build_dataset",
+        "--log-file",
+        "/var/log/machines/telemetry.jsonl",
+        "--segments-dir",
+        "/var/log/machines/segments",
+        "--quarantine-file",
+        "/var/log/machines/quarantine.jsonl",
+        "--checkpoint-file",
+        "/var/log/machines/state/builder_checkpoint.json",
+        "--contract-file",
+        "/var/log/machines/telemetry_contract.json",
+        "--out-dir",
+        "/var/log/machines/ml_dataset",
+        "--window-minutes",
+        "${BUILDER_WINDOW_MINUTES:-5}",
+        "--watermark-lookback-minutes",
+        "${BUILDER_WATERMARK_LOOKBACK_MIN:-15}",
+        "--horizon-windows",
+        "${BUILDER_HORIZON_WINDOWS:-1}",
+        "--partition-layout",
+        "${BUILDER_PARTITION_LAYOUT:-domain/dt}",
+        "--compression",
+        "${BUILDER_PARQUET_COMPRESSION:-zstd}",
+        "--local-segment-retention-hours",
+        "${BUILDER_SEGMENT_RETENTION_HOURS:-48}",
+        "--compact",
+        "--watch-interval-sec",
+        "${BUILDER_WATCH_INTERVAL_SEC:-30}",
+        "--upload-s3",
+        "--write-postgres"
+      ]
+    environment:
+      S3_ENDPOINT: http://rustfs:9000
+      S3_ACCESS_KEY: ${RUSTFS_ACCESS_KEY:-rustfsadmin}
+      S3_SECRET_KEY: ${RUSTFS_SECRET_KEY:-rustfsadmin}
+      S3_COLD_ENDPOINT: ${S3_COLD_ENDPOINT:-http://garage-cold:3900}
+      S3_COLD_ACCESS_KEY: ${GARAGE_ACCESS_KEY:-garageadmin}
+      S3_COLD_SECRET_KEY: ${GARAGE_SECRET_KEY:-garageadmin}
+      S3_COLD_BUCKET: ${S3_COLD_BUCKET:-machine-ml-cold}
+      S3_ML_BUCKET: ${S3_ML_BUCKET:-machine-ml}
+      S3_QUARANTINE_BUCKET: ${S3_QUARANTINE_BUCKET:-machine-quarantine}
+      PG_DSN: postgresql://${POSTGRES_USER:-mlops}:${POSTGRES_PASSWORD:-mlops}@postgres:5432/${POSTGRES_DB:-machine_logs}
+    volumes:
+      - logs_data:/var/log/machines
+    depends_on:
+      rustfs:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+
+volumes:
+  rustfs_data:
+  garage_cold_data:
+  postgres_data:
+  loki_data:
+  grafana_data:
+  logs_data:

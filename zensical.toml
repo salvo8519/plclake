@@ -1,0 +1,93 @@
+[project]
+site_name = "PLCLake — Industrial Telemetry & ML Lakehouse"
+site_description = "Bilingual (EN/IT) OT/IT Edge Gateway, Hot/Cold ML Lakehouse, Dynamic PLC Catalog, Managed X-API-Key Governance, OpenAPI 3.1 Scalar Reference & Grafana/Power BI Connectors."
+docs_dir = "docs"
+site_dir = "site"
+use_directory_urls = true
+extra_css = ["stylesheets/editorial-finance.css"]
+
+nav = [
+  { "Home (EN / IT)" = "index.md" },
+  { "English" = [
+    { "Overview" = "en/index.md" },
+    { "Architecture" = [
+      { "OT/IT Topology & Edge Gateway" = "en/architecture/ot-it-topology.md" },
+      { "Hot/Cold Lakehouse & Big Data" = "en/architecture/hot-cold-lakehouse.md" },
+    ] },
+    { "Operations Guides" = [
+      { "PLC Catalog & Parameterized Output" = "en/guides/plc-catalog-and-output.md" },
+      { "Day 1: PLC to Grafana & Power BI" = "en/guides/grafana-powerbi.md" },
+      { "i18n, CI & Maintenance Governance" = "en/guides/i18n-and-docs-governance.md" },
+    ] },
+    { "Security & API" = [
+      { "Multi-Scope Auth, API Keys & Hardening" = "en/security/api-auth-and-hardening.md" },
+      { "API Reference & Scalar OpenAPI 3.1" = "en/api/reference.md" },
+    ] },
+  ] },
+  { "Italiano" = [
+    { "Panoramica" = "it/index.md" },
+    { "Architettura" = [
+      { "Topologia OT/IT & Edge Gateway" = "it/architecture/ot-it-topology.md" },
+      { "Hot/Cold Lakehouse & Big Data" = "it/architecture/hot-cold-lakehouse.md" },
+    ] },
+    { "Guide Operative" = [
+      { "Catalogo PLC & Output Parametrizzabile" = "it/guides/plc-catalog-and-output.md" },
+      { "Giorno 1: PLC -> Grafana & Power BI" = "it/guides/grafana-powerbi.md" },
+      { "Governance i18n, CI & Manutenzione" = "it/guides/i18n-and-docs-governance.md" },
+    ] },
+    { "Sicurezza & API" = [
+      { "Auth Multi-Scope, API Key & Hardening" = "it/security/api-auth-and-hardening.md" },
+      { "API Reference & Scalar OpenAPI 3.1" = "it/api/reference.md" },
+    ] },
+  ] },
+]
+
+[project.theme]
+variant = "modern"
+language = "en"
+features = [
+  "navigation.tabs",
+  "navigation.sections",
+  "navigation.top",
+  "navigation.tracking",
+  "navigation.instant",
+  "content.code.copy",
+  "search.suggest",
+  "search.highlight",
+]
+
+[[project.theme.palette]]
+media = "(prefers-color-scheme: light)"
+scheme = "default"
+primary = "custom"
+accent = "custom"
+toggle.icon = "lucide/sun"
+toggle.name = "Switch to dark mode"
+
+[[project.theme.palette]]
+media = "(prefers-color-scheme: dark)"
+scheme = "slate"
+primary = "custom"
+accent = "custom"
+toggle.icon = "lucide/moon"
+toggle.name = "Switch to light mode"
+
+[project.markdown_extensions]
+admonition = {}
+tables = {}
+attr_list = {}
+md_in_html = {}
+toc = { permalink = true }
+
+[project.markdown_extensions.pymdownx.details]
+
+[project.markdown_extensions.pymdownx.highlight]
+anchor_linenums = true
+
+[project.markdown_extensions.pymdownx.tabbed]
+alternate_style = true
+
+[project.markdown_extensions.pymdownx.superfences]
+custom_fences = [
+  { name = "mermaid", class = "mermaid", format = "pymdownx.superfences.fence_code_format" }
+]

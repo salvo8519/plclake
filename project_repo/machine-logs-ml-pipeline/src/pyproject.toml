@@ -1,0 +1,29 @@
+[project]
+name = "machine-logs-ml-pipeline"
+version = "1.0.0"
+requires-python = ">=3.11"
+dependencies = [
+  "boto3>=1.35.0",
+  "duckdb>=1.1.0",
+  "pandas>=2.2.0",
+  "pyarrow>=17.0.0",
+  "psycopg[binary]>=3.2.0",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.3.0",
+]
+edge = [
+  "pymodbus>=3.7.0",
+  "asyncua>=1.1.0",
+  "paho-mqtt>=2.1.0",
+]
+
+[build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["simulator*", "dataset_builder*", "edge_gateway*"]

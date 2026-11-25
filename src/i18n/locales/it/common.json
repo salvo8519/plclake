@@ -1,0 +1,118 @@
+{
+  "app": {
+    "brandName": "PLCLake",
+    "brandFull": "Console PLCLake",
+    "brandTagline": "Piattaforma Operazioni Industriali & Edge Gateway",
+    "initializing": "Inizializzazione Console PLCLake...",
+    "loadingModule": "Caricamento modulo...",
+    "startupError": "Errore di Avvio Applicazione",
+    "reloadApp": "Ricarica Applicazione"
+  },
+  "nav": {
+    "ariaLabel": "Navigazione principale",
+    "groups": {
+      "operations": "Operazioni",
+      "configuration": "Configurazione",
+      "administration": "Amministrazione",
+      "developer": "API & Docs"
+    },
+    "views": {
+      "workbench": "Simulazione Live",
+      "fleet": "Valutazione Flotta",
+      "connections": "Connessioni Impianto",
+      "plc_catalog": "Catalogo PLC",
+      "job_config": "Configurazione Job",
+      "notifications": "Notifiche & Alert",
+      "users": "Utenti",
+      "roles": "Ruoli e Permessi",
+      "tokens": "Token API",
+      "audit": "Registro Audit"
+    },
+    "scalarDocs": "Documentazione API",
+    "scalarDocsTitle": "Apri riferimento interattivo bilingue OpenAPI 3.1 (Scalar)",
+    "liveBadge": "LIVE",
+    "liveStreamRunning": "Flusso live in esecuzione",
+    "activeJobPolicy": "Policy Job Attiva",
+    "windowSuffix": "finestra {{minutes}}m",
+    "pinSidebar": "Fissa Barra Laterale",
+    "unpinSidebar": "Sblocca Barra Laterale",
+    "pinSidebarAria": "Fissa la barra laterale aperta",
+    "unpinSidebarAria": "Riduci la barra laterale a icone",
+    "pinned": "Fissa",
+    "auto": "Auto",
+    "openMenu": "Apri menu di navigazione",
+    "closeMenu": "Chiudi menu di navigazione",
+    "versionLabel": "Versione"
+  },
+  "header": {
+    "env": "Amb",
+    "switchUser": "Cambia Utente",
+    "signOut": "Esci",
+    "signIn": "Accedi",
+    "localDevUnauth": "Sviluppo Locale · Non Autenticato",
+    "language": "Lingua"
+  },
+  "actions": {
+    "dismiss": "Chiudi",
+    "close": "Chiudi",
+    "cancel": "Annulla",
+    "save": "Salva",
+    "saving": "Salvataggio...",
+    "reset": "Ripristina",
+    "refresh": "Aggiorna",
+    "delete": "Elimina",
+    "edit": "Modifica",
+    "create": "Crea",
+    "exportCsv": "Esporta CSV",
+    "exportJson": "Esporta JSON",
+    "apply": "Applica",
+    "clear": "Pulisci",
+    "closeDrawer": "Chiudi pannello"
+  },
+  "pagination": {
+    "empty": "0 {{label}}",
+    "showing": "Visualizzati",
+    "of": "di",
+    "rowsPerPage": "Righe/pag",
+    "rowsPerPageAria": "Righe per pagina",
+    "navAria": "Paginazione tabella",
+    "previousPage": "Pagina precedente",
+    "nextPage": "Pagina successiva",
+    "pageAria": "Pagina {{page}}",
+    "defaultItemLabel": "voci"
+  },
+  "auth": {
+    "returnToConsole": "Torna alla Console",
+    "operatorSignIn": "Accesso Operatore",
+    "operatorSignInDesc": "Autenticati con il tuo account di stabilimento. I token di sessione sono revocabili e ogni operazione di scrittura viene registrata nell'Audit Log Immutabile.",
+    "workEmail": "Email Aziendale",
+    "password": "Password",
+    "showPassword": "Mostra password",
+    "hidePassword": "Nascondi password",
+    "verifying": "Verifica credenziali...",
+    "signInButton": "Accedi alla Console di Impianto",
+    "quickFillTitle": "Compilazione Rapida Ruoli di Stabilimento (Locale / Staging)",
+    "continueLocalDev": "Continua in Modalità Sviluppo Locale (non autenticato)",
+    "authPolicyStrict": "RIGOROSA (API_ENFORCE_AUTH=true)",
+    "authPolicyLocal": "SVILUPPO LOCALE (Sessione Opzionale)",
+    "footerSummary": "Policy Auth: {{policy}} · Hash Password: scrypt · Audit Trail Attivo",
+    "roles": {
+      "admin": "Admin Impianto",
+      "operator": "Operatore Turno",
+      "viewer": "Analista BI"
+    },
+    "errors": {
+      "authFailed": "Autenticazione fallita (HTTP {{status}})",
+      "unableToAuth": "Impossibile completare l'autenticazione"
+    }
+  },
+  "errors": {
+    "startStream": "Impossibile avviare il flusso live",
+    "startStreamStatus": "Impossibile avviare il flusso live ({{status}})",
+    "controlRun": "Impossibile eseguire {{action}} sul run",
+    "controlRunStatus": "Errore nell'azione {{action}} sulla simulazione ({{status}})",
+    "saveJobConfig": "Impossibile salvare la configurazione job",
+    "saveJobConfigStatus": "Errore nel salvataggio della configurazione job ({{status}})",
+    "initWorkspace": "Errore nell'inizializzazione del workspace telemetrico"
+  }
+}

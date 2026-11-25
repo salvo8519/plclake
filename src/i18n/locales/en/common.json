@@ -1,0 +1,118 @@
+{
+  "app": {
+    "brandName": "PLCLake",
+    "brandFull": "PLCLake Console",
+    "brandTagline": "Industrial Operations & Edge Gateway Platform",
+    "initializing": "Initializing PLCLake Console...",
+    "loadingModule": "Loading module...",
+    "startupError": "Application Startup Error",
+    "reloadApp": "Reload Application"
+  },
+  "nav": {
+    "ariaLabel": "Primary navigation",
+    "groups": {
+      "operations": "Operations",
+      "configuration": "Configuration",
+      "administration": "Administration",
+      "developer": "API & Docs"
+    },
+    "views": {
+      "workbench": "Live Simulation",
+      "fleet": "Fleet Evaluation",
+      "connections": "Plant Connections",
+      "plc_catalog": "PLC Catalog",
+      "job_config": "Job Configuration",
+      "notifications": "Notifications & Alerts",
+      "users": "Users",
+      "roles": "Roles & Permissions",
+      "tokens": "API Tokens",
+      "audit": "Audit Log"
+    },
+    "scalarDocs": "API Docs (Scalar)",
+    "scalarDocsTitle": "Open bilingual OpenAPI 3.1 Scalar reference",
+    "liveBadge": "LIVE",
+    "liveStreamRunning": "Live stream running",
+    "activeJobPolicy": "Active Job Policy",
+    "windowSuffix": "{{minutes}}m window",
+    "pinSidebar": "Pin Sidebar",
+    "unpinSidebar": "Unpin Sidebar",
+    "pinSidebarAria": "Pin sidebar open",
+    "unpinSidebarAria": "Unpin sidebar to icon rail",
+    "pinned": "Pinned",
+    "auto": "Auto",
+    "openMenu": "Open navigation menu",
+    "closeMenu": "Close navigation menu",
+    "versionLabel": "Release"
+  },
+  "header": {
+    "env": "Env",
+    "switchUser": "Switch User",
+    "signOut": "Sign Out",
+    "signIn": "Sign In",
+    "localDevUnauth": "Local Dev · Unauthenticated",
+    "language": "Language"
+  },
+  "actions": {
+    "dismiss": "Dismiss",
+    "close": "Close",
+    "cancel": "Cancel",
+    "save": "Save",
+    "saving": "Saving...",
+    "reset": "Reset",
+    "refresh": "Refresh",
+    "delete": "Delete",
+    "edit": "Edit",
+    "create": "Create",
+    "exportCsv": "Export CSV",
+    "exportJson": "Export JSON",
+    "apply": "Apply",
+    "clear": "Clear",
+    "closeDrawer": "Close drawer"
+  },
+  "pagination": {
+    "empty": "0 {{label}}",
+    "showing": "Showing",
+    "of": "of",
+    "rowsPerPage": "Rows/page",
+    "rowsPerPageAria": "Rows per page",
+    "navAria": "Table pagination",
+    "previousPage": "Previous page",
+    "nextPage": "Next page",
+    "pageAria": "Page {{page}}",
+    "defaultItemLabel": "entries"
+  },
+  "auth": {
+    "returnToConsole": "Return to Console",
+    "operatorSignIn": "Operator Sign In",
+    "operatorSignInDesc": "Authenticate with your plant account. Session tokens are revocable and every write action is recorded in the Immutable Audit Log.",
+    "workEmail": "Work Email",
+    "password": "Password",
+    "showPassword": "Show password",
+    "hidePassword": "Hide password",
+    "verifying": "Verifying credentials...",
+    "signInButton": "Sign In to Plant Console",
+    "quickFillTitle": "Quick-Fill Built-In Plant Roles (Local / Staging)",
+    "continueLocalDev": "Continue in Local Dev Mode (unauthenticated)",
+    "authPolicyStrict": "STRICT (API_ENFORCE_AUTH=true)",
+    "authPolicyLocal": "LOCAL DEV (Optional Session)",
+    "footerSummary": "Auth Policy: {{policy}} · Password Hash: scrypt · Audit Trail Active",
+    "roles": {
+      "admin": "Plant Admin",
+      "operator": "Shift Operator",
+      "viewer": "BI Viewer"
+    },
+    "errors": {
+      "authFailed": "Authentication failed (HTTP {{status}})",
+      "unableToAuth": "Unable to authenticate"
+    }
+  },
+  "errors": {
+    "startStream": "Unable to start live stream",
+    "startStreamStatus": "Unable to start live stream ({{status}})",
+    "controlRun": "Unable to {{action}} run",
+    "controlRunStatus": "Failed to {{action}} simulation ({{status}})",
+    "saveJobConfig": "Unable to save job configuration",
+    "saveJobConfigStatus": "Failed to save job configuration ({{status}})",
+    "initWorkspace": "Failed to initialize telemetry workspace"
+  }
+}

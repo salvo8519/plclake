@@ -1,0 +1,132 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: plant-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-mlops}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change_me_onprem}
+      POSTGRES_DB: ${POSTGRES_DB:-machine_logs}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ../postgres/init.sql:/docker-entrypoint-initdb.d/01_init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-mlops} -d ${POSTGRES_DB:-machine_logs}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  garage-cold:
+    image: dxflrs/garage:v1.0.1
+    container_name: plant-garage-cold
+    restart: unless-stopped
+    ports:
+      - "3900:3900"
+      - "3903:3903"
+    volumes:
+      - garage_cold_data:/var/lib/garage/data
+    environment:
+      GARAGE_RPC_SECRET: ${GARAGE_RPC_SECRET:-4d3f1d8c9a2b7e6f0c1d2e3f4a5b6c7d8e9f0a1b2c3d4e5f6a7b8c9d0e1f2a3b}
+      GARAGE_ALLOW_WORLD_READABLE_SECRETS: "true"
+
+  edge-gateway:
+    build:
+      context: ../../src
+      dockerfile: Dockerfile
+    container_name: plant-edge-gateway
+    restart: unless-stopped
+    network_mode: host
+    environment:
+      EDGE_CONNECTIONS_FILE: /etc/edge-gateway/connections.json
+      EDGE_CONFIG_URL: ${EDGE_CONFIG_URL:-}
+      EDGE_CONFIG_SYNC_SEC: ${EDGE_CONFIG_SYNC_SEC:-30}
+      EDGE_SPOOL_DB: /var/spool/edge-gateway/spool.db
+      EDGE_GATEWAY_TOKEN: ${EDGE_GATEWAY_TOKEN:-}
+    command:
+      [
+        "python",
+        "-m",
+        "edge_gateway.collector",
+        "--config",
+        "/etc/edge-gateway/connections.json",
+        "--config-url",
+        "${EDGE_CONFIG_URL:-}",
+        "--local-out-dir",
+        "/var/log/machines"
+      ]
+    volumes:
+      - ./connections.example.json:/etc/edge-gateway/connections.json:ro
+      - edge_spool:/var/spool/edge-gateway
+      - logs_data:/var/log/machines
+
+  dataset-builder:
+    build:
+      context: ../../src
+      dockerfile: Dockerfile
+    container_name: plant-dataset-builder
+    restart: unless-stopped
+    command:
+      [
+        "python",
+        "-m",
+        "dataset_builder.build_dataset",
+        "--log-file",
+        "/var/log/machines/telemetry.jsonl",
+        "--segments-dir",
+        "/var/log/machines/segments",
+        "--quarantine-file",
+        "/var/log/machines/quarantine.jsonl",
+        "--checkpoint-file",
+        "/var/log/machines/state/builder_checkpoint.json",
+        "--out-dir",
+        "/var/log/machines/ml_dataset",
+        "--partition-layout",
+        "${BUILDER_PARTITION_LAYOUT:-domain/dt}",
+        "--compression",
+        "${BUILDER_PARQUET_COMPRESSION:-zstd}",
+        "--compact",
+        "--watch-interval-sec",
+        "${BUILDER_WATCH_INTERVAL_SEC:-30}",
+        "--upload-s3",
+        "--write-postgres"
+      ]
+    environment:
+      S3_COLD_ENDPOINT: http://garage-cold:3900
+      S3_COLD_ACCESS_KEY: ${GARAGE_ACCESS_KEY:-garageadmin}
+      S3_COLD_SECRET_KEY: ${GARAGE_SECRET_KEY:-garageadmin}
+      S3_COLD_BUCKET: ${S3_COLD_BUCKET:-machine-ml-cold}
+      PG_DSN: postgresql://${POSTGRES_USER:-mlops}:${POSTGRES_PASSWORD:-change_me_onprem}@postgres:5432/${POSTGRES_DB:-machine_logs}
+    volumes:
+      - logs_data:/var/log/machines
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  grafana:
+    image: grafana/grafana:11.3.0
+    container_name: plant-grafana
+    restart: unless-stopped
+    ports:
+      - "3001:3000"
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-mlops}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change_me_onprem}
+      POSTGRES_DB: ${POSTGRES_DB:-machine_logs}
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-admin}
+    volumes:
+      - ../grafana/provisioning:/etc/grafana/provisioning:ro
+      - ../grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana_data:/var/lib/grafana
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  postgres_data:
+  garage_cold_data:
+  edge_spool:
+  logs_data:
+  grafana_data:

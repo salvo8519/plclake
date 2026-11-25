@@ -1,0 +1,124 @@
+{
+  "pageTitle": "PLCLake API — OpenAPI 3.1 Reference",
+  "header": {
+    "brand": "PLCLake",
+    "subtitle": "OpenAPI 3.1 Reference",
+    "backToConsole": "Back to Console",
+    "languageLabel": "Language"
+  },
+  "info": {
+    "title": "PLCLake — Industrial Telemetry & Edge Gateway API",
+    "description": [
+      "Production REST & Edge Ingestion API for multi-domain industrial telemetry (Manufacturing PLC/CNC, Gas Metering, Power Generation).",
+      "",
+      "### Multi-Scope Authentication (X-API-Key & Bearer — Testable in Scalar)",
+      "Pass a managed API key (`pat_live_...`) or scoped gateway key via **`X-API-Key: <token>`** (recommended) or **`Authorization: Bearer <token>`**:",
+      "- **Managed API Keys (`pat_live_...`):** Issued from **Administration → API Tokens** or via the **API Key / Test** button in the top bar. Scoped to `read`, `edge`, and/or `admin`, stored as AES-256-GCM encrypted SHA-256 hashes, with TTL, atomic rotation, and full Audit Log attribution.",
+      "- **Legacy / Gateway Keys:** `adm_live_...` (`admin`), `bi_live_...` (`read`), `gw_live_...` (`edge`).",
+      "- Test any credential immediately with **`GET /api/v1/auth/whoami`**.",
+      "",
+      "### Versioning & RFC Deprecation Policy",
+      "- **Versioned Namespace (`/api/v1/*`):** Current stable contract emitting `API-Version: 1.0.0`, `X-API-Contract: common-telemetry-envelope-v2`, `X-Request-Id`, and `X-API-Validation-Tier`.",
+      "- **Legacy Alias (`/api/*`):** Backward-compatible mirror emitting RFC 9745/8594 deprecation headers (`Deprecation: true`, `Sunset: Wed, 31 Dec 2026 23:59:59 GMT`, `Link: </api/v1/docs>; rel=\"deprecation\"`).",
+      "",
+      "### Two-Tier Validation Architecture",
+      "Every write endpoint supports two validation levels via the **`X-Validation-Mode`** header (or `?mode=` query parameter):",
+      "- **`permissive` (Tier 1 — Default):** Coerces compatible scalar types, supplies safe industrial defaults, and isolates malformed batch items into the SHA-256 Quarantine Sink without interrupting ingestion.",
+      "- **`strict` (Tier 2 — Advanced):** Enforces strict Zod `.strict()` contracts with detailed `400 Bad Request` field diagnostics (`{ tier, requestId, issues[] }`)."
+    ],
+    "serverCurrentHost": "Current Deployment Host",
+    "serverRelativeOrigin": "Relative Origin"
+  },
+  "securitySchemes": {
+    "GatewayBearerAuth": "Bearer token (`pat_live_...` managed API key, session token, or scoped `adm_live_`/`bi_live_`/`gw_live_` key).",
+    "ApiKeyHeaderAuth": "Recommended `X-API-Key` header carrying a managed `pat_live_...` key. Click 'API Key / Test' in the top bar to mint a 1h sandbox key or verify an admin-issued key.",
+    "GatewayHeaderAuth": "Legacy/Edge header carrying the Edge Gateway Token (`gw_live_...`)."
+  },
+  "tags": {
+    "System & Diagnostics": {
+      "name": "System & Diagnostics",
+      "description": "Liveness, readiness, Prometheus OpenMetrics, and active credential inspection."
+    },
+    "PLC Catalog & Output Contract": {
+      "name": "PLC Catalog & Output Contract",
+      "description": "Dynamic machine profiles, extra telemetry channels, and dry-run output previews."
+    },
+    "Ingestion & Edge Gateway": {
+      "name": "Ingestion & Edge Gateway",
+      "description": "Plug & Play Edge Collector auto-sync configuration and batch telemetry ingestion."
+    },
+    "Plant Connections": {
+      "name": "Plant Connections",
+      "description": "OT endpoint registry, SSRF-hardened probes, scoped key rotation, and on-premise deploy bundles."
+    },
+    "Pipeline Job & ML": {
+      "name": "Pipeline Job & ML",
+      "description": "Dataset Builder policies, Hot/Cold lakehouse tiering, and real-time simulation streams."
+    },
+    "Business Analytics (Grafana & Power BI)": {
+      "name": "Business Analytics (Grafana & Power BI)",
+      "description": "Daily OEE, energy (kWh), and gas volume (Nm3) KPI feeds in JSON and RFC 4180 CSV."
+    },
+    "Notifications & Alerts (SMTP / Mailpit & Webhook)": {
+      "name": "Notifications & Alerts (SMTP / Mailpit & Webhook)",
+      "description": "Threshold alert rules, encrypted SMTP/Mailpit diagnostics, HMAC-signed webhooks, and alert triage."
+    },
+    "Users, RBAC & Audit Log": {
+      "name": "Users, RBAC & Audit Log",
+      "description": "Operator authentication, RBAC role permissions matrix, and immutable audit ledger."
+    }
+  },
+  "operations": {
+    "GET /api/v1/version": "Centralized platform release version, API contract & build metadata (also mounted at /version)",
+    "GET /api/v1/health": "Service health & active run heartbeat",
+    "GET /healthz": "Kubernetes / Docker liveness probe",
+    "GET /readyz": "Kubernetes / Docker readiness probe",
+    "GET /api/v1/metrics": "Prometheus OpenMetrics exposition endpoint (also mounted at /metrics)",
+    "GET /api/v1/auth/whoami": "Verify active Bearer / X-API-Key credential & granted scope",
+    "GET /api/v1/catalog/machines": "List all PLC & industrial meter catalog profiles (scope: read)",
+    "GET /api/v1/catalog/machines/{typeId}": "Retrieve a single PLC profile specification (scope: read)",
+    "POST /api/v1/catalog/machines": "Register or parameterize a PLC profile in the catalog (scope: admin)",
+    "DELETE /api/v1/catalog/machines/{typeId}": "Delete custom PLC profile or reset built-in preset (scope: admin)",
+    "POST /api/v1/catalog/machines/{typeId}/preview-output": "Preview parameterized telemetry, ML window, and BA KPI output (scope: read)",
+    "POST /api/v1/ingest/batch": "Ingest normalized Common Telemetry Envelope batches",
+    "GET /api/v1/edge/config": "Plug & Play Edge Collector auto-sync configuration",
+    "GET /api/v1/connections": "List configured PLC & industrial meter endpoints (scope: read)",
+    "POST /api/v1/connections": "Create or update a PLC/Meter endpoint (scope: admin)",
+    "PUT /api/v1/connections/settings": "Update corporate OT/IT deployment topology & auth policy (scope: admin)",
+    "POST /api/v1/connections/gateway-token/rotate": "Issue or rotate Edge Gateway Bearer token (scope: admin)",
+    "POST /api/v1/connections/api-keys/rotate": "Issue or rotate scoped API key (`edge`, `read`, `admin`) (scope: admin)",
+    "POST /api/v1/connections/{id}/probe": "Run SSRF-hardened TCP/HTTP reachability & RTT probe (scope: admin)",
+    "POST /api/v1/connections/{id}/send-test-batch": "Dispatch live test envelope through ingest pipeline (scope: admin)",
+    "DELETE /api/v1/connections/{id}": "Remove a configured PLC/Meter endpoint (scope: admin)",
+    "GET /api/v1/connections/deploy-bundle": "Generate On-Premise Docker Compose, Edge config & installer script (scope: admin)",
+    "GET /api/v1/job/config": "Retrieve active Dataset Builder & Lakehouse job policy (scope: read)",
+    "PUT /api/v1/job/config": "Update & persist Dataset Builder and Tiering job policy (scope: admin)",
+    "POST /api/v1/pipeline/runs": "Start real-time multi-domain telemetry simulation stream (scope: admin)",
+    "GET /api/v1/pipeline/runs/latest": "Fetch latest run snapshot (ML windows, logs, quarantine, tiering) (scope: read)",
+    "POST /api/v1/pipeline/runs/{id}/pause": "Pause active simulation stream (scope: admin)",
+    "POST /api/v1/pipeline/runs/{id}/resume": "Resume paused simulation stream (scope: admin)",
+    "POST /api/v1/pipeline/runs/{id}/stop": "Stop active or paused simulation stream (scope: admin)",
+    "GET /api/v1/ba/kpi": "Query daily OEE, energy (kWh) & gas volume (Nm3) KPIs (scope: read)",
+    "GET /api/v1/alerts": "Fetch SMTP/Mailpit channel config, Webhook config, alert rules, and recent events (scope: read)",
+    "PUT /api/v1/alerts/channels": "Update SMTP / Mailpit and HTTP Webhook notification channels (scope: admin)",
+    "POST /api/v1/alerts/rules": "Create or update a telemetry threshold alert rule (scope: admin)",
+    "POST /api/v1/alerts/test-channel": "Send a live test email via SMTP/Mailpit or HTTP POST via Webhook (scope: admin)",
+    "POST /api/v1/alerts/smtp/verify": "Verify active SMTP server TCP/EHLO/AUTH handshake (scope: admin)",
+    "POST /api/v1/alerts/smtp/send-test": "Send a custom diagnostic test email via configured SMTP settings (scope: admin)",
+    "GET /api/v1/alerts/mailpit/status": "Query Mailpit API connection status, queue depth, and runtime stats (scope: read)",
+    "GET /api/v1/alerts/mailpit/messages": "Query captured test emails from Mailpit REST API (scope: read)",
+    "GET /api/v1/alerts/mailpit/messages/{id}": "Inspect a single Mailpit message body, HTML, and headers (scope: read)",
+    "DELETE /api/v1/alerts/mailpit/messages": "Clear all captured messages in Mailpit inbox (scope: admin)",
+    "POST /api/v1/auth/login": "Authenticate operator with email & password to issue revocable session token",
+    "GET /api/v1/users": "List RBAC operator accounts (scope: read)",
+    "POST /api/v1/users": "Create a new RBAC user (admin / operator / viewer) (scope: admin)",
+    "GET /api/v1/audit/logs": "Query immutable Audit Log (JSON or CSV) (scope: read)",
+    "GET /api/v1/roles/permissions": "Get configurable ERP Role Permissions Matrix (menu views & capabilities per role) (scope: read)",
+    "PUT /api/v1/roles/permissions": "Update ERP Role Permissions Matrix for operator and viewer roles (admin stays locked to full access) (scope: admin)",
+    "GET /api/v1/tokens": "List managed API keys and usage telemetry (secrets never returned) (scope: read)",
+    "POST /api/v1/tokens": "Issue a new scoped X-API-Key (returned once, stored encrypted at rest) (scope: admin)",
+    "POST /api/v1/tokens/sandbox": "Mint a short-lived 1-hour sandbox X-API-Key for Scalar or integration testing",
+    "POST /api/v1/tokens/{id}/rotate": "Atomically rotate an API key (revokes previous key and returns new secret once) (scope: admin)",
+    "DELETE /api/v1/tokens/{id}": "Immediately revoke an API key (scope: admin)"
+  }
+}

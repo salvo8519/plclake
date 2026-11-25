@@ -1,0 +1,96 @@
+stages:
+  - quality
+  - security
+  - test
+  - build
+
+default:
+  interruptible: true
+
+variables:
+  NODE_VERSION: "22"
+  PYTHON_VERSION: "3.11"
+  NPM_CONFIG_CACHE: "$CI_PROJECT_DIR/.npm"
+
+.node_cache:
+  cache:
+    key:
+      files:
+        - package-lock.json
+        - package.json
+    paths:
+      - .npm/
+      - node_modules/
+
+quality:node:
+  stage: quality
+  image: node:${NODE_VERSION}-alpine
+  extends: .node_cache
+  script:
+    - npm install --no-audit --no-fund
+    - npm run lint
+    - npm run lint:eslint
+    - npm run lint:code
+    - npm run check:i18n
+
+quality:python-ruff:
+  stage: quality
+  image: python:${PYTHON_VERSION}-slim
+  script:
+    - pip install --no-cache-dir ruff
+    - ruff check project_repo/
+    - ruff format --check project_repo/
+
+security:dependency-audit:
+  stage: security
+  image: node:${NODE_VERSION}-alpine
+  extends: .node_cache
+  script:
+    - npm install --no-audit --no-fund
+    - npm run audit:deps
+  allow_failure: false
+
+test:vitest:
+  stage: test
+  image: node:${NODE_VERSION}-alpine
+  extends: .node_cache
+  script:
+    - npm install --no-audit --no-fund
+    - npm test
+
+test:python-edge:
+  stage: test
+  image: python:${PYTHON_VERSION}-slim
+  variables:
+    PYTHONPATH: project_repo/machine-logs-ml-pipeline/src
+  script:
+    - pip install --no-cache-dir pytest
+    - pytest -v project_repo/machine-logs-ml-pipeline/tests/test_edge_drivers.py
+
+build:frontend:
+  stage: build
+  image: node:${NODE_VERSION}-alpine
+  extends: .node_cache
+  script:
+    - npm install --no-audit --no-fund
+    - npm run build
+    - npm run build:server
+  artifacts:
+    paths:
+      - dist/
+      - dist-server/
+    expire_in: 7 days
+
+pages:
+  stage: build
+  image: python:${PYTHON_VERSION}-slim
+  rules:
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+  script:
+    - pip install --no-cache-dir zensical
+    - zensical build --clean
+    - rm -rf public_pages && mv site public_pages
+  artifacts:
+    paths:
+      - public_pages/
+  publish: public_pages

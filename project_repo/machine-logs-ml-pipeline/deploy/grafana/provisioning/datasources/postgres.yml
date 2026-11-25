@@ -1,0 +1,16 @@
+apiVersion: 1
+
+datasources:
+  - name: PostgreSQL-ML
+    uid: postgres-ml
+    type: postgres
+    access: proxy
+    url: postgres:5432
+    user: ${POSTGRES_USER:-mlops}
+    secureJsonData:
+      password: ${POSTGRES_PASSWORD:-change_me_onprem}
+    jsonData:
+      database: ${POSTGRES_DB:-machine_logs}
+      sslmode: disable
+      postgresVersion: 1600
+    editable: false

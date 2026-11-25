@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>PLCLake API — OpenAPI 3.1 Reference</title>
+    <style>
+      :root {
+        --scalar-font: "DM Sans", "Plus Jakarta Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        --scalar-font-code: "JetBrains Mono", "Fira Code", ui-monospace, SFMono-Regular, monospace;
+        --scalar-color-1: #0d1620;
+        --scalar-color-2: #475569;
+        --scalar-color-3: #64748b;
+        --scalar-color-accent: #16324f;
+        --scalar-background-1: #ffffff;
+        --scalar-background-2: #f8f9fa;
+        --scalar-background-3: #f1f4f8;
+        --scalar-border-color: #e4e8ee;
+        --scalar-sidebar-background-1: #f8f9fa;
+        --scalar-sidebar-color-1: #0d1620;
+        --scalar-sidebar-color-2: #475569;
+        --scalar-sidebar-border-color: #e4e8ee;
+        --scalar-radius: 2px;
+        --scalar-radius-lg: 2px;
+        --scalar-radius-xl: 2px;
+      }
+      body {
+        margin: 0;
+        padding-top: 48px;
+        background: #f5f7f9;
+        font-family: var(--scalar-font);
+      }
+      .erp-scalar-topbar {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 48px;
+        z-index: 9999;
+        background: #0b1622;
+        border-bottom: 2px solid #c9a45c;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0 20px;
+        color: #ffffff;
+        box-sizing: border-box;
+      }
+      .erp-scalar-topbar-left {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+      .erp-scalar-topbar-brand {
+        font-size: 13px;
+        font-weight: 700;
+        letter-spacing: -0.01em;
+      }
+      .erp-scalar-topbar-sub {
+        font-family: "JetBrains Mono", ui-monospace, monospace;
+        font-size: 11px;
+        color: #c9a45c;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+      }
+      .erp-scalar-lang-group {
+        display: inline-flex;
+        align-items: center;
+        border: 1px solid #1e354d;
+        background: #122437;
+        border-radius: 2px;
+        padding: 2px;
+        gap: 2px;
+      }
+      .erp-scalar-lang-btn {
+        padding: 3px 8px;
+        font-family: "JetBrains Mono", ui-monospace, monospace;
+        font-size: 11px;
+        font-weight: 600;
+        text-decoration: none;
+        border-radius: 1px;
+        color: #cbd5e1;
+      }
+      .erp-scalar-lang-btn.is-active {
+        background: #c9a45c;
+        color: #0b1622;
+      }
+      .scalar-api-reference table,
+      .scalar-api-reference pre,
+      .scalar-api-reference .scalar-card {
+        border-radius: 2px !important;
+        border-color: #e4e8ee !important;
+        box-shadow: none !important;
+      }
+      .open-api-client-button,
+      a[href*="scalar.com"],
+      .powered-by-scalar,
+      [data-testid="powered-by"] {
+        display: none !important;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="erp-scalar-topbar" role="banner">
+      <div class="erp-scalar-topbar-left">
+        <span class="erp-scalar-topbar-brand">PLCLake</span>
+        <span class="erp-scalar-topbar-sub" id="erp-scalar-sub">OpenAPI 3.1 Reference</span>
+      </div>
+      <div class="erp-scalar-lang-group" role="group" aria-label="Language">
+        <a id="lang-en" href="?lang=en" class="erp-scalar-lang-btn">EN</a>
+        <a id="lang-it" href="?lang=it" class="erp-scalar-lang-btn">IT</a>
+      </div>
+    </div>
+
+    <div id="scalar-mount"></div>
+    <script>
+      (function () {
+        var params = new URLSearchParams(window.location.search);
+        var lang = (params.get('lang') || '').toLowerCase() === 'it' ? 'it' : 'en';
+        document.documentElement.lang = lang;
+        document.getElementById('lang-' + lang).classList.add('is-active');
+        document.getElementById('erp-scalar-sub').textContent =
+          lang === 'it' ? 'Specifica OpenAPI 3.1' : 'OpenAPI 3.1 Reference';
+
+        var refScript = document.createElement('script');
+        refScript.id = 'api-reference';
+        refScript.dataset.url = lang === 'it' ? './openapi.it.json' : './openapi.en.json';
+        refScript.dataset.configuration = JSON.stringify({
+          theme: 'default',
+          darkMode: false,
+          hideDarkModeToggle: true,
+          hideClientButton: true,
+          showDeveloperTools: 'never',
+          telemetry: false,
+          authentication: { preferredSecurityScheme: 'ApiKeyHeaderAuth' },
+        });
+        document.getElementById('scalar-mount').appendChild(refScript);
+
+        var cdn = document.createElement('script');
+        cdn.src = 'https://cdn.jsdelivr.net/npm/@scalar/api-reference';
+        document.body.appendChild(cdn);
+      })();
+    </script>
+  </body>
+</html>

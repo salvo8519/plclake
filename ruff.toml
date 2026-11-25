@@ -1,0 +1,16 @@
+# Ruff linter & formatter configuration for Python Edge Gateway (project_repo/)
+target-version = "py311"
+line-length = 100
+extend-include = ["project_repo/**/*.py"]
+
+[lint]
+select = ["E", "F", "I", "UP", "B", "S"]
+ignore = ["E501"]
+
+[lint.per-file-ignores]
+"project_repo/**/tests/**/*.py" = ["S101", "S105", "S106"]
+
+[format]
+quote-style = "double"
+indent-style = "space"
+line-ending = "lf"

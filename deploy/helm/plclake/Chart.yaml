@@ -1,0 +1,13 @@
+apiVersion: v2
+name: plclake
+description: PLCLake — Industrial Telemetry, Edge Gateway & ML Lakehouse Platform
+type: application
+version: 1.0.0
+appVersion: "1.0.0"
+home: https://github.com/salvo8519/PLCLake
+keywords:
+  - industrial-telemetry
+  - plc
+  - scada
+  - lakehouse
+  - observability

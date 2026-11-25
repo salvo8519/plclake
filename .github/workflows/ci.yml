@@ -1,0 +1,69 @@
+name: CI — TypeCheck, Biome, Ruff, Security Tests & Edge Drivers
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+
+jobs:
+  node-platform-ci:
+    name: Node.js API, Biome, Security & Build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: TypeScript typecheck
+        run: npm run lint
+
+      - name: ESLint (Airbnb style guide — frontend + backend)
+        run: npm run lint:eslint
+
+      - name: Biome lint check (frontend + backend)
+        run: npm run lint:code
+
+      - name: Verify EN/IT parity, static OpenAPI/Scalar drift, links & README badges
+        run: npm run check:i18n
+
+      - name: Audit production dependencies for high/critical vulnerabilities
+        run: npm run audit:deps
+
+      - name: Run Vitest security, token lifecycle, DB & API integration tests
+        run: npm test
+
+      - name: Verify production Vite & esbuild server builds
+        run: npm run build && npm run build:server
+
+  python-edge-ci:
+    name: Python Edge Gateway, Ruff & Virtual PLC Bench
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install pytest & ruff
+        run: pip install --no-cache-dir pytest ruff
+
+      - name: Ruff lint & format check
+        run: |
+          ruff check project_repo/
+          ruff format --check project_repo/
+
+      - name: Run Edge Collector & Modbus TCP / HTTP Virtual PLC tests
+        env:
+          PYTHONPATH: project_repo/machine-logs-ml-pipeline/src
+        run: pytest -v project_repo/machine-logs-ml-pipeline/tests/test_edge_drivers.py

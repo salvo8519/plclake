@@ -1,0 +1,124 @@
+# PLCLake Helm Chart — Default Values
+# Override with values-staging.yaml or values-prod.yaml per environment.
+
+replicaCount: 1
+
+image:
+  repository: ghcr.io/salvo8519/plclake
+  tag: "" # Defaults to Chart.appVersion
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+
+serviceAccount:
+  create: true
+  name: ""
+  annotations: {}
+
+podAnnotations: {}
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  runAsGroup: 1000
+  fsGroup: 1000
+  seccompProfile:
+    type: RuntimeDefault
+
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: false
+  capabilities:
+    drop:
+      - ALL
+
+service:
+  type: ClusterIP
+  port: 80
+  targetPort: 3000
+
+ingress:
+  enabled: false
+  className: nginx
+  annotations: {}
+  hosts:
+    - host: plclake.local
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []
+
+resources:
+  requests:
+    cpu: 200m
+    memory: 256Mi
+  limits:
+    cpu: 1000m
+    memory: 1Gi
+
+# Horizontal Pod Autoscaler
+# NOTE: Enable replicas > 1 only with sticky sessions on Ingress or after moving
+# in-memory sessions/rate-limits to shared Redis/Valkey.
+autoscaling:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 4
+  targetCPUUtilizationPercentage: 75
+  targetMemoryUtilizationPercentage: 80
+
+podDisruptionBudget:
+  enabled: false
+  minAvailable: 1
+
+terminationGracePeriodSeconds: 30
+
+# Persistent storage for atomic .state fallback & auto-generated key (optional if DATABASE_URL + SECRETS_ENCRYPTION_KEY are set)
+persistence:
+  enabled: true
+  accessMode: ReadWriteOnce
+  size: 2Gi
+  storageClass: ""
+
+# Non-secret environment configuration
+env:
+  NODE_ENV: production
+  PORT: "3000"
+  PLANT_SITE_ID: plant-01
+  LOG_LEVEL: info
+  DATABASE_SSL: "true"
+  DATABASE_POOL_MAX: "20"
+  API_ENFORCE_AUTH: "true"
+  METRICS_AUTH_REQUIRED: "false"
+  SCALAR_CDN_URL: ""
+  CORS_ORIGIN: ""
+  SMTP_HOST: ""
+  SMTP_PORT: "587"
+  SMTP_SECURE: "false"
+  SMTP_FROM: "alerts@plant.local"
+  ALERT_EMAIL_TO: "maintenance@plant.local"
+
+# Name of an existing Kubernetes Secret (managed via ExternalSecrets, SealedSecrets, or CI)
+# Expected keys: DATABASE_URL, SECRETS_ENCRYPTION_KEY, AUTH_ADMIN_EMAIL, AUTH_ADMIN_PASSWORD,
+#                optional SMTP_USER, SMTP_PASS, ALERT_WEBHOOK_SECRET
+existingSecret: "plclake-secrets"
+
+probes:
+  liveness:
+    path: /healthz
+    initialDelaySeconds: 10
+    periodSeconds: 15
+    timeoutSeconds: 3
+    failureThreshold: 3
+  readiness:
+    path: /readyz
+    initialDelaySeconds: 5
+    periodSeconds: 10
+    timeoutSeconds: 3
+    failureThreshold: 3
+
+serviceMonitor:
+  enabled: false
+  interval: 15s
+  scrapeTimeout: 10s
+  path: /metrics
+  labels: {}

@@ -1,0 +1,10 @@
+{
+  "name": "PLCLake",
+  "shortMark": "PL",
+  "fullName": "PLCLake — Industrial Telemetry & ML Lakehouse",
+  "slug": "plclake",
+  "version": "1.0.0",
+  "channel": "stable",
+  "apiContract": "common-telemetry-envelope-v2",
+  "license": "Apache-2.0"
+}

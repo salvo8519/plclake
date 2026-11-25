@@ -1,0 +1,25 @@
+# PLCLake Reverse Proxy (Caddy 2)
+# - For public/DNS hostname with automatic Let's Encrypt TLS:
+#     PLCLAKE_SITE_ADDRESS=plclake.company.com
+# - For internal plant LAN with Caddy internal CA HTTPS:
+#     PLCLAKE_SITE_ADDRESS=https://plclake.plant.local  (add `tls internal` below)
+# - For plain HTTP behind an existing corporate L7 load balancer / firewall:
+#     PLCLAKE_SITE_ADDRESS=:80
+
+{$PLCLAKE_SITE_ADDRESS::80} {
+	encode zstd gzip
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Frame-Options "SAMEORIGIN"
+		-Server
+	}
+
+	reverse_proxy plclake:3000 {
+		# Keep Server-Sent Events (SSE) live simulation streams unbuffered
+		flush_interval -1
+		health_uri /readyz
+		health_interval 15s
+		health_timeout 5s
+	}
+}

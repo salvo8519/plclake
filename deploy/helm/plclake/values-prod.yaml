@@ -1,0 +1,70 @@
+# PLCLake — Production Environment Overrides
+# Usage:
+#   helm upgrade --install plclake ./deploy/helm/plclake \
+#     -n plclake-prod --create-namespace \
+#     -f ./deploy/helm/plclake/values-prod.yaml \
+#     --set image.tag="1.0.0"
+
+replicaCount: 1
+
+image:
+  pullPolicy: IfNotPresent
+
+env:
+  PLANT_SITE_ID: plant-prod-01
+  LOG_LEVEL: info
+  API_ENFORCE_AUTH: "true"
+  DATABASE_SSL: "true"
+  DATABASE_POOL_MAX: "25"
+  METRICS_AUTH_REQUIRED: "false"
+
+existingSecret: "plclake-prod-secrets"
+
+ingress:
+  enabled: true
+  className: nginx
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-buffering: "off"
+    nginx.ingress.kubernetes.io/affinity: "cookie"
+    nginx.ingress.kubernetes.io/session-cookie-name: "plclake_route"
+  hosts:
+    - host: plclake.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - secretName: plclake-prod-tls
+      hosts:
+        - plclake.example.com
+
+resources:
+  requests:
+    cpu: 500m
+    memory: 512Mi
+  limits:
+    cpu: 2000m
+    memory: 2Gi
+
+# Flip enabled: true once Redis/Valkey backs shared sessions & rate limits
+autoscaling:
+  enabled: false
+  minReplicas: 2
+  maxReplicas: 6
+  targetCPUUtilizationPercentage: 70
+  targetMemoryUtilizationPercentage: 80
+
+podDisruptionBudget:
+  enabled: false
+  minAvailable: 1
+
+persistence:
+  enabled: true
+  size: 10Gi
+
+serviceMonitor:
+  enabled: true
+  interval: 15s
+  labels:
+    release: kube-prometheus-stack

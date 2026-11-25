@@ -1,0 +1,5765 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "PLCLake — API Telemetria Industriale & Edge Gateway",
+    "version": "1.0.0",
+    "description": "API REST e di ingestione Edge di produzione per telemetria industriale multi-dominio (PLC/CNC Manufacturing, Gas Metering, Power Generation).\n\n### Autenticazione Multi-Scope (X-API-Key & Bearer — Testabile in Scalar)\nPassa una chiave API gestita (`pat_live_...`) o una chiave gateway tramite **`X-API-Key: <token>`** (consigliato) oppure **`Authorization: Bearer <token>`**:\n- **Chiavi API Gestite (`pat_live_...`):** Emesse da **Amministrazione → Token API** o tramite il pulsante **Chiave API / Test** nella barra superiore. Con scope granulari (`read`, `edge`, `admin`), memorizzate cifrate at rest (AES-256-GCM su digest SHA-256), con scadenza TTL, rotazione atomica e tracciamento completo nell'Audit Log.\n- **Chiavi Legacy / Gateway:** `adm_live_...` (`admin`), `bi_live_...` (`read`), `gw_live_...` (`edge`).\n- Verifica subito qualsiasi credenziale con **`GET /api/v1/auth/whoami`**.\n\n### Versioning & Policy di Deprecazione RFC\n- **Namespace Versionato (`/api/v1/*`):** Contratto stabile corrente con intestazioni `API-Version: 1.0.0`, `X-API-Contract: common-telemetry-envelope-v2`, `X-Request-Id` e `X-API-Validation-Tier`.\n- **Alias Legacy (`/api/*`):** Mirror retrocompatibile con header standard RFC 9745/8594 (`Deprecation: true`, `Sunset: Wed, 31 Dec 2026 23:59:59 GMT`, `Link: </api/v1/docs>; rel=\"deprecation\"`).\n\n### Architettura di Validazione Two-Tier\nOgni endpoint di scrittura supporta due livelli di validazione tramite header **`X-Validation-Mode`** (o parametro query `?mode=`):\n- **`permissive` (Tier 1 — Predefinito):** Converte tipi scalari compatibili, applica default industriali sicuri e isola i record malformati nella Quarantine Sink SHA-256 senza interrompere l'ingestione.\n- **`strict` (Tier 2 — Avanzato):** Applica contratti Zod `.strict()` rigorosi restituendo `400 Bad Request` con diagnostica puntuale campo per campo (`{ tier, requestId, issues[] }`)."
+  },
+  "tags": [
+    {
+      "name": "Sistema & Diagnostica",
+      "description": "Probe di liveness/readiness, metriche Prometheus OpenMetrics e verifica delle credenziali attive."
+    },
+    {
+      "name": "Catalogo PLC & Contratto Output",
+      "description": "Profili macchina dinamici, canali telemetrici extra e anteprima dry-run dell'output."
+    },
+    {
+      "name": "Ingestione & Edge Gateway",
+      "description": "Configurazione auto-sync Plug & Play per Edge Collector e ingestione batch telemetrica."
+    },
+    {
+      "name": "Connessioni Impianto",
+      "description": "Registro endpoint OT, probe anti-SSRF, rotazione chiavi scoped e deploy bundle on-premise."
+    },
+    {
+      "name": "Job Pipeline & ML",
+      "description": "Policy del Dataset Builder, tiering Lakehouse Hot/Cold e flussi di simulazione real-time."
+    },
+    {
+      "name": "Business Analytics (Grafana & Power BI)",
+      "description": "Feed KPI giornalieri OEE, energia (kWh) e volumi gas (Nm3) in JSON e CSV RFC 4180."
+    },
+    {
+      "name": "Notifiche & Alert (SMTP / Mailpit & Webhook)",
+      "description": "Regole alert di soglia, diagnostica SMTP/Mailpit cifrata, webhook firmati HMAC e triage alert."
+    },
+    {
+      "name": "Utenti, RBAC & Registro Audit",
+      "description": "Autenticazione operatori, matrice permessi RBAC e registro audit immutabile."
+    }
+  ],
+  "servers": [
+    {
+      "url": "/",
+      "description": "Origine Relativa"
+    }
+  ],
+  "components": {
+    "securitySchemes": {
+      "GatewayBearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "adm_live_... | bi_live_... | gw_live_...",
+        "description": "Token Bearer (`pat_live_...` chiave API gestita, token di sessione o chiavi scoped `adm_live_`/`bi_live_`/`gw_live_`)."
+      },
+      "ApiKeyHeaderAuth": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "X-API-Key",
+        "description": "Header `X-API-Key` consigliato con chiave gestita `pat_live_...`. Clicca 'Chiave API / Test' nella barra superiore per emettere una chiave sandbox 1h o verificare una chiave admin."
+      },
+      "GatewayHeaderAuth": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "X-Gateway-Token",
+        "description": "Header legacy/Edge per il trasporto del token Edge Gateway (`gw_live_...`)."
+      }
+    },
+    "schemas": {
+      "VersionResponse": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "fullName": {
+            "type": "string"
+          },
+          "slug": {
+            "type": "string"
+          },
+          "version": {
+            "type": "string"
+          },
+          "tag": {
+            "type": "string"
+          },
+          "channel": {
+            "type": "string"
+          },
+          "apiContract": {
+            "type": "string"
+          },
+          "license": {
+            "type": "string"
+          },
+          "environment": {
+            "type": "string"
+          },
+          "plantSiteId": {
+            "type": "string"
+          },
+          "buildSha": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "buildTime": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "name",
+          "fullName",
+          "slug",
+          "version",
+          "tag",
+          "channel",
+          "apiContract",
+          "license",
+          "environment",
+          "plantSiteId",
+          "buildSha",
+          "buildTime"
+        ]
+      },
+      "HealthResponse": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "ok"
+            ]
+          },
+          "name": {
+            "type": "string"
+          },
+          "version": {
+            "type": "string"
+          },
+          "environment": {
+            "type": "string"
+          },
+          "apiVersion": {
+            "type": "string"
+          },
+          "activeRunId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "activeRunStatus": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "storage": {
+            "type": "object",
+            "properties": {
+              "mode": {
+                "type": "string",
+                "enum": [
+                  "postgres",
+                  "file-fallback"
+                ]
+              },
+              "connected": {
+                "type": "boolean"
+              },
+              "databaseHost": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "featureRowsStored": {
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              },
+              "lastError": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "mode",
+              "connected",
+              "databaseHost",
+              "featureRowsStored",
+              "lastError"
+            ]
+          },
+          "updatedAt": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "environment",
+          "apiVersion",
+          "activeRunId",
+          "activeRunStatus",
+          "updatedAt"
+        ]
+      },
+      "AuthWhoAmIResponse": {
+        "type": "object",
+        "properties": {
+          "authenticated": {
+            "type": "boolean"
+          },
+          "grantedScope": {
+            "type": "string",
+            "enum": [
+              "edge",
+              "read",
+              "admin",
+              "anonymous"
+            ]
+          },
+          "enforcementEnabled": {
+            "type": "boolean"
+          },
+          "requestId": {
+            "type": "string"
+          },
+          "allowedScopes": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "edge",
+                "read",
+                "admin"
+              ]
+            }
+          },
+          "authSource": {
+            "type": "string"
+          },
+          "tokenId": {
+            "type": "string"
+          },
+          "tokenName": {
+            "type": "string"
+          },
+          "tokenPrefix": {
+            "type": "string"
+          },
+          "ownerEmail": {
+            "type": "string"
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "admin",
+              "operator",
+              "viewer"
+            ]
+          }
+        },
+        "required": [
+          "authenticated",
+          "grantedScope",
+          "enforcementEnabled",
+          "requestId",
+          "allowedScopes"
+        ]
+      },
+      "ApiError": {
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "string"
+          },
+          "tier": {
+            "type": "string",
+            "enum": [
+              "permissive",
+              "strict"
+            ]
+          },
+          "requestId": {
+            "type": "string"
+          },
+          "issues": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ValidationErrorIssue"
+            }
+          }
+        },
+        "required": [
+          "error"
+        ]
+      },
+      "ValidationErrorIssue": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string"
+          },
+          "code": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "path",
+          "code",
+          "message"
+        ]
+      },
+      "PlcCatalogListResponse": {
+        "type": "object",
+        "properties": {
+          "profiles": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PlcCatalogProfile"
+            }
+          },
+          "availableOutputFields": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "updatedAt": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "profiles",
+          "availableOutputFields",
+          "updatedAt"
+        ]
+      },
+      "PlcCatalogProfile": {
+        "type": "object",
+        "properties": {
+          "typeId": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "vendorFamily": {
+            "type": "string"
+          },
+          "domain": {
+            "type": "string",
+            "enum": [
+              "manufacturing",
+              "gas-metering",
+              "power-generation"
+            ]
+          },
+          "defaultProtocol": {
+            "type": "string",
+            "enum": [
+              "opcua",
+              "modbus-tcp",
+              "mqtt-sparkplug",
+              "http-rest-meter"
+            ]
+          },
+          "defaultPort": {
+            "type": "integer"
+          },
+          "isBuiltIn": {
+            "type": "boolean"
+          },
+          "primaryKey": {
+            "type": "string"
+          },
+          "primaryUnit": {
+            "type": "string"
+          },
+          "primaryNominal": {
+            "type": "number"
+          },
+          "primaryStd": {
+            "type": "number"
+          },
+          "primaryFaultThreshold": {
+            "type": "number"
+          },
+          "primaryFaultLowThreshold": {
+            "type": "number"
+          },
+          "secondaryKey": {
+            "type": "string"
+          },
+          "secondaryUnit": {
+            "type": "string"
+          },
+          "secondaryNominal": {
+            "type": "number"
+          },
+          "secondaryStd": {
+            "type": "number"
+          },
+          "secondaryFaultThreshold": {
+            "type": "number"
+          },
+          "tempNominalC": {
+            "type": "number"
+          },
+          "tempStdC": {
+            "type": "number"
+          },
+          "tempFaultThresholdC": {
+            "type": "number"
+          },
+          "extraChannels": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PlcExtraChannel"
+            }
+          },
+          "defaultOutputFields": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "baFormula": {
+            "type": "string",
+            "enum": [
+              "oee_cycle_count",
+              "gas_nm3_integration",
+              "energy_kwh_integration",
+              "custom_throughput"
+            ]
+          },
+          "updatedAt": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "typeId",
+          "label",
+          "vendorFamily",
+          "domain",
+          "defaultProtocol",
+          "defaultPort",
+          "isBuiltIn",
+          "primaryKey",
+          "primaryUnit",
+          "primaryNominal",
+          "primaryStd",
+          "primaryFaultThreshold",
+          "secondaryKey",
+          "secondaryUnit",
+          "secondaryNominal",
+          "secondaryStd",
+          "tempNominalC",
+          "tempStdC",
+          "tempFaultThresholdC",
+          "extraChannels",
+          "defaultOutputFields",
+          "baFormula",
+          "updatedAt"
+        ]
+      },
+      "PlcExtraChannel": {
+        "type": "object",
+        "properties": {
+          "key": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 40
+          },
+          "unit": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 16
+          },
+          "nominal": {
+            "type": "number"
+          },
+          "std": {
+            "type": "number",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "key",
+          "unit",
+          "nominal",
+          "std"
+        ],
+        "additionalProperties": false
+      },
+      "PlcCatalogUpsertResponse": {
+        "type": "object",
+        "properties": {
+          "profile": {
+            "$ref": "#/components/schemas/PlcCatalogProfile"
+          },
+          "catalog": {
+            "$ref": "#/components/schemas/PlcCatalogListResponse"
+          },
+          "created": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "profile",
+          "catalog",
+          "created"
+        ]
+      },
+      "PlcCatalogUpsertStrict": {
+        "type": "object",
+        "properties": {
+          "typeId": {
+            "type": "string",
+            "minLength": 2,
+            "maxLength": 48,
+            "pattern": "^[a-zA-Z0-9._-]+$"
+          },
+          "label": {
+            "type": "string",
+            "minLength": 2,
+            "maxLength": 80
+          },
+          "vendorFamily": {
+            "type": "string",
+            "minLength": 2,
+            "maxLength": 80
+          },
+          "domain": {
+            "type": "string",
+            "enum": [
+              "manufacturing",
+              "gas-metering",
+              "power-generation"
+            ]
+          },
+          "defaultProtocol": {
+            "type": "string",
+            "enum": [
+              "opcua",
+              "modbus-tcp",
+              "mqtt-sparkplug",
+              "http-rest-meter"
+            ]
+          },
+          "defaultPort": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 65535
+          },
+          "primaryKey": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 40
+          },
+          "primaryUnit": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 16
+          },
+          "primaryNominal": {
+            "type": "number"
+          },
+          "primaryStd": {
+            "type": "number",
+            "minimum": 0
+          },
+          "primaryFaultThreshold": {
+            "type": "number"
+          },
+          "primaryFaultLowThreshold": {
+            "type": "number"
+          },
+          "secondaryKey": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 40
+          },
+          "secondaryUnit": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 16
+          },
+          "secondaryNominal": {
+            "type": "number"
+          },
+          "secondaryStd": {
+            "type": "number",
+            "minimum": 0
+          },
+          "secondaryFaultThreshold": {
+            "type": "number"
+          },
+          "tempNominalC": {
+            "type": "number",
+            "minimum": -50,
+            "maximum": 200
+          },
+          "tempStdC": {
+            "type": "number",
+            "minimum": 0
+          },
+          "tempFaultThresholdC": {
+            "type": "number",
+            "minimum": -30,
+            "maximum": 250
+          },
+          "extraChannels": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PlcExtraChannel"
+            },
+            "maxItems": 8
+          },
+          "defaultOutputFields": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1,
+            "maxItems": 20
+          },
+          "baFormula": {
+            "type": "string",
+            "enum": [
+              "oee_cycle_count",
+              "gas_nm3_integration",
+              "energy_kwh_integration",
+              "custom_throughput"
+            ]
+          }
+        },
+        "required": [
+          "typeId",
+          "label",
+          "vendorFamily",
+          "domain",
+          "defaultProtocol",
+          "defaultPort",
+          "primaryKey",
+          "primaryUnit",
+          "primaryNominal",
+          "primaryStd",
+          "primaryFaultThreshold",
+          "secondaryKey",
+          "secondaryUnit",
+          "secondaryNominal",
+          "secondaryStd",
+          "tempNominalC",
+          "tempStdC",
+          "tempFaultThresholdC",
+          "defaultOutputFields",
+          "baFormula"
+        ],
+        "additionalProperties": false
+      },
+      "PlcCatalogUpsertPermissive": {
+        "type": "object",
+        "properties": {
+          "typeId": {
+            "type": "string",
+            "minLength": 2,
+            "maxLength": 48
+          },
+          "label": {
+            "type": "string",
+            "maxLength": 80
+          },
+          "vendorFamily": {
+            "type": "string",
+            "maxLength": 80
+          },
+          "domain": {
+            "type": "string",
+            "enum": [
+              "manufacturing",
+              "gas-metering",
+              "power-generation"
+            ]
+          },
+          "defaultProtocol": {
+            "type": "string",
+            "enum": [
+              "opcua",
+              "modbus-tcp",
+              "mqtt-sparkplug",
+              "http-rest-meter"
+            ]
+          },
+          "defaultPort": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 65535
+          },
+          "primaryKey": {
+            "type": "string",
+            "maxLength": 40
+          },
+          "primaryUnit": {
+            "type": "string",
+            "maxLength": 16
+          },
+          "primaryNominal": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "primaryStd": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "primaryFaultThreshold": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "secondaryKey": {
+            "type": "string",
+            "maxLength": 40
+          },
+          "secondaryUnit": {
+            "type": "string",
+            "maxLength": 16
+          },
+          "secondaryNominal": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "tempNominalC": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "tempFaultThresholdC": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "extraChannels": {
+            "type": "array",
+            "items": {},
+            "maxItems": 8
+          },
+          "defaultOutputFields": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "baFormula": {
+            "type": "string",
+            "enum": [
+              "oee_cycle_count",
+              "gas_nm3_integration",
+              "energy_kwh_integration",
+              "custom_throughput"
+            ]
+          }
+        },
+        "required": [
+          "typeId"
+        ],
+        "additionalProperties": {}
+      },
+      "PlcCatalogDeleteResponse": {
+        "type": "object",
+        "properties": {
+          "deleted": {
+            "type": "boolean"
+          },
+          "resetToBuiltIn": {
+            "type": "boolean"
+          },
+          "catalog": {
+            "$ref": "#/components/schemas/PlcCatalogListResponse"
+          }
+        },
+        "required": [
+          "deleted",
+          "resetToBuiltIn",
+          "catalog"
+        ]
+      },
+      "PlcOutputPreviewResponse": {
+        "type": "object",
+        "properties": {
+          "typeId": {
+            "type": "string"
+          },
+          "profile": {
+            "$ref": "#/components/schemas/PlcCatalogProfile"
+          },
+          "sampleEnvelope": {
+            "type": "object",
+            "additionalProperties": {}
+          },
+          "projectedFeatureWindow": {
+            "type": "object",
+            "additionalProperties": {}
+          },
+          "projectedBaKpi": {
+            "type": "object",
+            "additionalProperties": {}
+          }
+        },
+        "required": [
+          "typeId",
+          "profile",
+          "sampleEnvelope",
+          "projectedFeatureWindow",
+          "projectedBaKpi"
+        ]
+      },
+      "PlcOutputPreviewRequest": {
+        "type": "object",
+        "properties": {
+          "machineId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 32
+          },
+          "lineId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 32
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "IDLE",
+              "RUNNING",
+              "DEGRADED",
+              "FAULT",
+              "MAINTENANCE"
+            ]
+          },
+          "fields": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "additionalProperties": {}
+      },
+      "IngestBatchResponse": {
+        "type": "object",
+        "properties": {
+          "runId": {
+            "type": "string"
+          },
+          "accepted": {
+            "type": "integer"
+          },
+          "deduplicated": {
+            "type": "integer"
+          },
+          "quarantined": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "runId",
+          "accepted",
+          "deduplicated",
+          "quarantined"
+        ]
+      },
+      "IngestBatchStrict": {
+        "type": "object",
+        "properties": {
+          "events": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TelemetryEnvelopeStrict"
+            },
+            "minItems": 1,
+            "maxItems": 5000
+          }
+        },
+        "required": [
+          "events"
+        ],
+        "additionalProperties": false
+      },
+      "TelemetryEnvelopeStrict": {
+        "type": "object",
+        "properties": {
+          "event_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "machine_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64
+          },
+          "line_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64
+          },
+          "machine_type": {
+            "type": "string",
+            "minLength": 2,
+            "maxLength": 48,
+            "pattern": "^[a-zA-Z0-9._-]+$"
+          },
+          "site_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64
+          },
+          "domain": {
+            "type": "string",
+            "enum": [
+              "manufacturing",
+              "gas-metering",
+              "power-generation"
+            ]
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "IDLE",
+              "RUNNING",
+              "DEGRADED",
+              "FAULT",
+              "MAINTENANCE"
+            ]
+          },
+          "level": {
+            "type": "string",
+            "enum": [
+              "INFO",
+              "WARN",
+              "ERROR"
+            ]
+          },
+          "error_code": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "metrics": {
+            "type": "object",
+            "properties": {
+              "temp_c": {
+                "type": "number",
+                "minimum": -50,
+                "maximum": 250
+              }
+            },
+            "required": [
+              "temp_c"
+            ],
+            "additionalProperties": {
+              "type": "number"
+            }
+          }
+        },
+        "required": [
+          "timestamp",
+          "machine_id",
+          "line_id",
+          "machine_type",
+          "state",
+          "metrics"
+        ],
+        "additionalProperties": false
+      },
+      "IngestBatchPermissive": {
+        "type": "object",
+        "properties": {
+          "events": {
+            "type": "array",
+            "items": {},
+            "minItems": 1,
+            "maxItems": 5000
+          },
+          "event": {}
+        }
+      },
+      "EdgeSyncConfig": {
+        "type": "object",
+        "properties": {
+          "config_hash": {
+            "type": "string"
+          },
+          "updated_at": {
+            "type": "string"
+          },
+          "sync_interval_sec": {
+            "type": "integer"
+          },
+          "site_name": {
+            "type": "string"
+          },
+          "deployment_topology": {
+            "type": "string",
+            "enum": [
+              "on-premise-lan",
+              "site-to-site-vpn",
+              "edge-gateway-push"
+            ]
+          },
+          "ingest_api_url": {
+            "type": "string"
+          },
+          "spool_max_mb": {
+            "type": "integer"
+          },
+          "connections": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "machine_id": {
+                  "type": "string"
+                },
+                "line_id": {
+                  "type": "string"
+                },
+                "machine_type": {
+                  "type": "string"
+                },
+                "domain": {
+                  "type": "string",
+                  "enum": [
+                    "manufacturing",
+                    "gas-metering",
+                    "power-generation"
+                  ]
+                },
+                "protocol": {
+                  "type": "string",
+                  "enum": [
+                    "opcua",
+                    "modbus-tcp",
+                    "mqtt-sparkplug",
+                    "http-rest-meter"
+                  ]
+                },
+                "host": {
+                  "type": "string"
+                },
+                "port": {
+                  "type": "integer"
+                },
+                "endpoint_or_topic": {
+                  "type": "string"
+                },
+                "poll_interval_sec": {
+                  "type": "integer"
+                },
+                "auth_mode": {
+                  "type": "string",
+                  "enum": [
+                    "anonymous",
+                    "username-password",
+                    "x509-cert",
+                    "bearer-token"
+                  ]
+                },
+                "tag_bindings": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "source_tag": {
+                        "type": "string"
+                      },
+                      "target_metric": {
+                        "type": "string"
+                      },
+                      "scale_factor": {
+                        "type": "number"
+                      },
+                      "unit": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "source_tag",
+                      "target_metric",
+                      "scale_factor",
+                      "unit"
+                    ]
+                  }
+                }
+              },
+              "required": [
+                "id",
+                "name",
+                "machine_id",
+                "line_id",
+                "machine_type",
+                "protocol",
+                "host",
+                "port",
+                "endpoint_or_topic",
+                "poll_interval_sec",
+                "auth_mode",
+                "tag_bindings"
+              ]
+            }
+          }
+        },
+        "required": [
+          "config_hash",
+          "updated_at",
+          "sync_interval_sec",
+          "site_name",
+          "deployment_topology",
+          "ingest_api_url",
+          "spool_max_mb",
+          "connections"
+        ]
+      },
+      "ConnectionsStateResponse": {
+        "type": "object",
+        "properties": {
+          "settings": {
+            "$ref": "#/components/schemas/NetworkDeploymentSettings"
+          },
+          "connections": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PlcConnection"
+            }
+          },
+          "updatedAt": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "settings",
+          "connections",
+          "updatedAt"
+        ]
+      },
+      "NetworkDeploymentSettings": {
+        "type": "object",
+        "properties": {
+          "topologyMode": {
+            "type": "string",
+            "enum": [
+              "on-premise-lan",
+              "site-to-site-vpn",
+              "edge-gateway-push"
+            ]
+          },
+          "siteName": {
+            "type": "string"
+          },
+          "plantVlanCidr": {
+            "type": "string"
+          },
+          "ingestApiUrl": {
+            "type": "string"
+          },
+          "requireGatewayToken": {
+            "type": "boolean"
+          },
+          "spoolMaxMb": {
+            "type": "integer"
+          },
+          "tokenFingerprint": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "tokenUpdatedAt": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "topologyMode",
+          "siteName",
+          "plantVlanCidr",
+          "ingestApiUrl",
+          "requireGatewayToken",
+          "spoolMaxMb",
+          "tokenFingerprint",
+          "tokenUpdatedAt"
+        ]
+      },
+      "PlcConnection": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "machineId": {
+            "type": "string"
+          },
+          "lineId": {
+            "type": "string"
+          },
+          "machineType": {
+            "type": "string"
+          },
+          "protocol": {
+            "type": "string",
+            "enum": [
+              "opcua",
+              "modbus-tcp",
+              "mqtt-sparkplug",
+              "http-rest-meter"
+            ]
+          },
+          "deploymentTopology": {
+            "type": "string",
+            "enum": [
+              "on-premise-lan",
+              "site-to-site-vpn",
+              "edge-gateway-push"
+            ]
+          },
+          "host": {
+            "type": "string"
+          },
+          "port": {
+            "type": "integer"
+          },
+          "endpointOrTopic": {
+            "type": "string"
+          },
+          "pollIntervalSec": {
+            "type": "integer"
+          },
+          "authMode": {
+            "type": "string",
+            "enum": [
+              "anonymous",
+              "username-password",
+              "x509-cert",
+              "bearer-token"
+            ]
+          },
+          "username": {
+            "type": "string"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "configured",
+              "connected",
+              "unreachable",
+              "disabled"
+            ]
+          },
+          "lastProbeAt": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "lastLatencyMs": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "lastError": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "samplesIngested": {
+            "type": "integer"
+          },
+          "tagBindings": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TagBinding"
+            }
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "machineId",
+          "lineId",
+          "machineType",
+          "protocol",
+          "deploymentTopology",
+          "host",
+          "port",
+          "endpointOrTopic",
+          "pollIntervalSec",
+          "authMode",
+          "enabled",
+          "status",
+          "lastProbeAt",
+          "lastLatencyMs",
+          "lastError",
+          "samplesIngested",
+          "tagBindings"
+        ]
+      },
+      "TagBinding": {
+        "type": "object",
+        "properties": {
+          "sourceTag": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120
+          },
+          "targetMetric": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 48
+          },
+          "scaleFactor": {
+            "type": "number",
+            "exclusiveMinimum": 0
+          },
+          "unit": {
+            "type": "string",
+            "maxLength": 16
+          }
+        },
+        "required": [
+          "sourceTag",
+          "targetMetric",
+          "scaleFactor",
+          "unit"
+        ],
+        "additionalProperties": false
+      },
+      "ConnectionUpsertResponse": {
+        "type": "object",
+        "properties": {
+          "connection": {
+            "$ref": "#/components/schemas/PlcConnection"
+          },
+          "state": {
+            "$ref": "#/components/schemas/ConnectionsStateResponse"
+          }
+        },
+        "required": [
+          "connection",
+          "state"
+        ]
+      },
+      "ConnectionUpsertStrict": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64
+          },
+          "name": {
+            "type": "string",
+            "minLength": 2,
+            "maxLength": 80
+          },
+          "machineId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 32
+          },
+          "lineId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 32
+          },
+          "machineType": {
+            "type": "string",
+            "minLength": 2,
+            "maxLength": 48,
+            "pattern": "^[a-zA-Z0-9._-]+$"
+          },
+          "protocol": {
+            "type": "string",
+            "enum": [
+              "opcua",
+              "modbus-tcp",
+              "mqtt-sparkplug",
+              "http-rest-meter"
+            ]
+          },
+          "deploymentTopology": {
+            "type": "string",
+            "enum": [
+              "on-premise-lan",
+              "site-to-site-vpn",
+              "edge-gateway-push"
+            ]
+          },
+          "host": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "pattern": "^[a-zA-Z0-9._-]+$"
+          },
+          "port": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 65535
+          },
+          "endpointOrTopic": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "pollIntervalSec": {
+            "anyOf": [
+              {
+                "type": "number",
+                "enum": [
+                  1
+                ]
+              },
+              {
+                "type": "number",
+                "enum": [
+                  2
+                ]
+              },
+              {
+                "type": "number",
+                "enum": [
+                  5
+                ]
+              },
+              {
+                "type": "number",
+                "enum": [
+                  10
+                ]
+              },
+              {
+                "type": "number",
+                "enum": [
+                  30
+                ]
+              }
+            ]
+          },
+          "authMode": {
+            "type": "string",
+            "enum": [
+              "anonymous",
+              "username-password",
+              "x509-cert",
+              "bearer-token"
+            ]
+          },
+          "username": {
+            "type": "string",
+            "maxLength": 64
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "tagBindings": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TagBinding"
+            },
+            "minItems": 1,
+            "maxItems": 16
+          }
+        },
+        "required": [
+          "name",
+          "machineId",
+          "lineId",
+          "machineType",
+          "protocol",
+          "deploymentTopology",
+          "host",
+          "port",
+          "endpointOrTopic",
+          "pollIntervalSec",
+          "authMode"
+        ],
+        "additionalProperties": false
+      },
+      "ConnectionUpsertPermissive": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64
+          },
+          "name": {
+            "type": "string",
+            "maxLength": 80
+          },
+          "machineId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 32
+          },
+          "machine_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 32
+          },
+          "lineId": {
+            "type": "string",
+            "maxLength": 32
+          },
+          "line_id": {
+            "type": "string",
+            "maxLength": 32
+          },
+          "machineType": {
+            "type": "string",
+            "maxLength": 48
+          },
+          "machine_type": {
+            "type": "string",
+            "maxLength": 48
+          },
+          "protocol": {
+            "type": "string",
+            "enum": [
+              "opcua",
+              "modbus-tcp",
+              "mqtt-sparkplug",
+              "http-rest-meter"
+            ]
+          },
+          "deploymentTopology": {
+            "type": "string",
+            "enum": [
+              "on-premise-lan",
+              "site-to-site-vpn",
+              "edge-gateway-push"
+            ]
+          },
+          "host": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "port": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 65535
+          },
+          "endpointOrTopic": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "pollIntervalSec": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "authMode": {
+            "type": "string",
+            "enum": [
+              "anonymous",
+              "username-password",
+              "x509-cert",
+              "bearer-token"
+            ]
+          },
+          "username": {
+            "type": "string",
+            "maxLength": 64
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "tagBindings": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "sourceTag": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 120,
+                  "default": "tag_0"
+                },
+                "targetMetric": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 48,
+                  "default": "temp_c"
+                },
+                "scaleFactor": {
+                  "type": "number",
+                  "exclusiveMinimum": 0,
+                  "default": 1
+                },
+                "unit": {
+                  "type": "string",
+                  "maxLength": 16,
+                  "default": ""
+                }
+              },
+              "additionalProperties": {}
+            },
+            "maxItems": 16
+          }
+        },
+        "additionalProperties": {}
+      },
+      "NetworkDeploymentSettingsInput": {
+        "type": "object",
+        "properties": {
+          "topologyMode": {
+            "type": "string",
+            "enum": [
+              "on-premise-lan",
+              "site-to-site-vpn",
+              "edge-gateway-push"
+            ]
+          },
+          "siteName": {
+            "type": "string",
+            "minLength": 2,
+            "maxLength": 80
+          },
+          "plantVlanCidr": {
+            "type": "string",
+            "minLength": 4,
+            "maxLength": 64
+          },
+          "ingestApiUrl": {
+            "type": "string",
+            "maxLength": 200,
+            "format": "uri"
+          },
+          "requireGatewayToken": {
+            "type": "boolean"
+          },
+          "spoolMaxMb": {
+            "anyOf": [
+              {
+                "type": "number",
+                "enum": [
+                  256
+                ]
+              },
+              {
+                "type": "number",
+                "enum": [
+                  1024
+                ]
+              },
+              {
+                "type": "number",
+                "enum": [
+                  4096
+                ]
+              }
+            ]
+          }
+        },
+        "required": [
+          "topologyMode",
+          "siteName",
+          "plantVlanCidr",
+          "ingestApiUrl",
+          "requireGatewayToken",
+          "spoolMaxMb"
+        ],
+        "additionalProperties": false
+      },
+      "GatewayTokenRotateResponse": {
+        "type": "object",
+        "properties": {
+          "token": {
+            "type": "string"
+          },
+          "tokenFingerprint": {
+            "type": "string"
+          },
+          "tokenUpdatedAt": {
+            "type": "string"
+          },
+          "state": {
+            "$ref": "#/components/schemas/ConnectionsStateResponse"
+          }
+        },
+        "required": [
+          "token",
+          "tokenFingerprint",
+          "tokenUpdatedAt",
+          "state"
+        ]
+      },
+      "ScopedKeyRotateResponse": {
+        "type": "object",
+        "properties": {
+          "scope": {
+            "type": "string",
+            "enum": [
+              "edge",
+              "read",
+              "admin"
+            ]
+          },
+          "token": {
+            "type": "string"
+          },
+          "tokenFingerprint": {
+            "type": "string"
+          },
+          "tokenUpdatedAt": {
+            "type": "string"
+          },
+          "state": {
+            "$ref": "#/components/schemas/ConnectionsStateResponse"
+          }
+        },
+        "required": [
+          "scope",
+          "token",
+          "tokenFingerprint",
+          "tokenUpdatedAt",
+          "state"
+        ]
+      },
+      "ScopedKeyRotateRequest": {
+        "type": "object",
+        "properties": {
+          "scope": {
+            "type": "string",
+            "enum": [
+              "edge",
+              "read",
+              "admin"
+            ]
+          }
+        },
+        "required": [
+          "scope"
+        ],
+        "additionalProperties": false
+      },
+      "ConnectionProbeResponse": {
+        "type": "object",
+        "properties": {
+          "probe": {
+            "$ref": "#/components/schemas/ConnectionProbeResult"
+          },
+          "state": {
+            "$ref": "#/components/schemas/ConnectionsStateResponse"
+          }
+        },
+        "required": [
+          "probe",
+          "state"
+        ]
+      },
+      "ConnectionProbeResult": {
+        "type": "object",
+        "properties": {
+          "connectionId": {
+            "type": "string"
+          },
+          "reachable": {
+            "type": "boolean"
+          },
+          "protocol": {
+            "type": "string",
+            "enum": [
+              "opcua",
+              "modbus-tcp",
+              "mqtt-sparkplug",
+              "http-rest-meter"
+            ]
+          },
+          "host": {
+            "type": "string"
+          },
+          "port": {
+            "type": "integer"
+          },
+          "latencyMs": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "checkedAt": {
+            "type": "string"
+          },
+          "errorCode": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "errorMessage": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "connectionId",
+          "reachable",
+          "protocol",
+          "host",
+          "port",
+          "latencyMs",
+          "checkedAt",
+          "errorCode",
+          "errorMessage"
+        ]
+      },
+      "ConnectionTestBatchResponse": {
+        "type": "object",
+        "properties": {
+          "result": {
+            "$ref": "#/components/schemas/IngestBatchResponse"
+          },
+          "envelope": {
+            "type": "object",
+            "additionalProperties": {}
+          },
+          "state": {
+            "$ref": "#/components/schemas/ConnectionsStateResponse"
+          }
+        },
+        "required": [
+          "result",
+          "envelope",
+          "state"
+        ]
+      },
+      "ConnectionDeleteResponse": {
+        "type": "object",
+        "properties": {
+          "deleted": {
+            "type": "boolean"
+          },
+          "state": {
+            "$ref": "#/components/schemas/ConnectionsStateResponse"
+          }
+        },
+        "required": [
+          "deleted",
+          "state"
+        ]
+      },
+      "OnPremDeployBundle": {
+        "type": "object",
+        "properties": {
+          "generatedAt": {
+            "type": "string"
+          },
+          "topologyMode": {
+            "type": "string",
+            "enum": [
+              "on-premise-lan",
+              "site-to-site-vpn",
+              "edge-gateway-push"
+            ]
+          },
+          "edgeConnectionsJson": {
+            "type": "string"
+          },
+          "edgeEnvFile": {
+            "type": "string"
+          },
+          "onPremComposeYml": {
+            "type": "string"
+          },
+          "installScriptSh": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "generatedAt",
+          "topologyMode",
+          "edgeConnectionsJson",
+          "edgeEnvFile",
+          "onPremComposeYml",
+          "installScriptSh"
+        ]
+      },
+      "JobConfigResponse": {
+        "type": "object",
+        "properties": {
+          "config": {
+            "$ref": "#/components/schemas/JobConfig"
+          },
+          "updatedAt": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "config",
+          "updatedAt"
+        ]
+      },
+      "JobConfig": {
+        "type": "object",
+        "properties": {
+          "environment": {
+            "type": "string",
+            "enum": [
+              "local",
+              "staging",
+              "production"
+            ]
+          },
+          "executionMode": {
+            "type": "string",
+            "enum": [
+              "continuous-watch",
+              "one-shot-batch"
+            ]
+          },
+          "watchIntervalSec": {
+            "type": "integer"
+          },
+          "windowMinutes": {
+            "type": "integer"
+          },
+          "watermarkLookbackMin": {
+            "type": "integer"
+          },
+          "horizonWindows": {
+            "type": "integer"
+          },
+          "rotateMaxLines": {
+            "type": "integer"
+          },
+          "dedupStrategy": {
+            "type": "string",
+            "enum": [
+              "event_id_strict",
+              "event_id_plus_timestamp"
+            ]
+          },
+          "malformedPolicy": {
+            "type": "string",
+            "enum": [
+              "quarantine_sha256",
+              "drop_and_count",
+              "halt_on_error"
+            ]
+          },
+          "timestampMode": {
+            "type": "string",
+            "enum": [
+              "utc_iso8601_strict",
+              "utc_coerced"
+            ]
+          },
+          "machineProfileMode": {
+            "type": "string"
+          },
+          "machinesPerLine": {
+            "type": "integer"
+          },
+          "tempAnomalyThresholdC": {
+            "type": "number"
+          },
+          "vibrationP95Threshold": {
+            "type": "number"
+          },
+          "minValidSampleRatio": {
+            "type": "number"
+          },
+          "datasetVersion": {
+            "type": "string"
+          },
+          "storageTarget": {
+            "type": "string",
+            "enum": [
+              "garage-s3",
+              "rustfs-s3",
+              "local-fs"
+            ]
+          },
+          "parquetCompression": {
+            "type": "string",
+            "enum": [
+              "zstd",
+              "snappy",
+              "gzip"
+            ]
+          },
+          "partitionLayout": {
+            "type": "string",
+            "enum": [
+              "domain/dt",
+              "dt/machine_id",
+              "dt/line_id/machine_id",
+              "dt/hour/machine_id"
+            ]
+          },
+          "featureMartSink": {
+            "type": "string",
+            "enum": [
+              "postgres-upsert",
+              "parquet-only"
+            ]
+          },
+          "hotRetentionDays": {
+            "type": "integer"
+          },
+          "coldRetentionDays": {
+            "type": "integer"
+          },
+          "coldStorageEndpoint": {
+            "type": "string",
+            "enum": [
+              "garage-s3-cold",
+              "s3-glacier-compatible",
+              "nas-cold-archive"
+            ]
+          },
+          "lakehouseFormat": {
+            "type": "string",
+            "enum": [
+              "duckdb-parquet-compacted",
+              "hive-parquet-append"
+            ]
+          },
+          "compactionSchedule": {
+            "type": "string",
+            "enum": [
+              "hourly",
+              "daily-01utc",
+              "weekly-sun"
+            ]
+          },
+          "ingestTransport": {
+            "type": "string",
+            "enum": [
+              "local-segments",
+              "http-batch-ingest"
+            ]
+          },
+          "customMachineTopology": {
+            "type": "string"
+          },
+          "ignoredErrorCodes": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "environment",
+          "executionMode",
+          "watchIntervalSec",
+          "windowMinutes",
+          "watermarkLookbackMin",
+          "horizonWindows",
+          "rotateMaxLines",
+          "dedupStrategy",
+          "malformedPolicy",
+          "timestampMode",
+          "machineProfileMode",
+          "machinesPerLine",
+          "tempAnomalyThresholdC",
+          "vibrationP95Threshold",
+          "minValidSampleRatio",
+          "datasetVersion",
+          "storageTarget",
+          "parquetCompression",
+          "partitionLayout",
+          "featureMartSink",
+          "hotRetentionDays",
+          "coldRetentionDays",
+          "coldStorageEndpoint",
+          "lakehouseFormat",
+          "compactionSchedule",
+          "ingestTransport",
+          "customMachineTopology",
+          "ignoredErrorCodes"
+        ]
+      },
+      "JobConfigInput": {
+        "type": "object",
+        "properties": {
+          "environment": {
+            "type": "string",
+            "enum": [
+              "local",
+              "staging",
+              "production"
+            ]
+          },
+          "executionMode": {
+            "type": "string",
+            "enum": [
+              "continuous-watch",
+              "one-shot-batch"
+            ]
+          },
+          "watchIntervalSec": {
+            "anyOf": [
+              {
+                "type": "number",
+                "enum": [
+                  10
+                ]
+              },
+              {
+                "type": "number",
+                "enum": [
+                  30
+                ]
+              },
+              {
+                "type": "number",
+                "enum": [
+                  60
+                ]
+              },
+              {
+                "type": "number",
+                "enum": [
+                  300
+                ]
+              }
+            ]
+          },
+          "windowMinutes": {
+            "anyOf": [
+              {
+                "type": "number",
+                "enum": [
+                  1
+                ]
+              },
+              {
+                "type": "number",
+                "enum": [
+                  5
+                ]
+              },
+              {
+                "type": "number",
+                "enum": [
+                  15
+                ]
+              }
+            ]
+          },
+          "watermarkLookbackMin": {
+            "anyOf": [
+              {
+                "type": "number",
+                "enum": [
+                  5
+                ]
+              },
+              {
+                "type": "number",
+                "enum": [
+                  15
+                ]
+              },
+              {
+                "type": "number",
+                "enum": [
+                  30
+                ]
+              },
+              {
+                "type": "number",
+                "enum": [
+                  60
+                ]
+              }
+            ]
+          },
+          "horizonWindows": {
+            "anyOf": [
+              {
+                "type": "number",
+                "enum": [
+                  1
+                ]
+              },
+              {
+                "type": "number",
+                "enum": [
+                  2
+                ]
+              },
+              {
+                "type": "number",
+                "enum": [
+                  3
+                ]
+              }
+            ]
+          },
+          "rotateMaxLines": {
+            "anyOf": [
+              {
+                "type": "number",
+                "enum": [
+                  250
+                ]
+              },
+              {
+                "type": "number",
+                "enum": [
+                  500
+                ]
+              },
+              {
+                "type": "number",
+                "enum": [
+                  1000
+                ]
+              },
+              {
+                "type": "number",
+                "enum": [
+                  2000
+                ]
+              },
+              {
+                "type": "number",
+                "enum": [
+                  5000
+                ]
+              }
+            ]
+          },
+          "dedupStrategy": {
+            "type": "string",
+            "enum": [
+              "event_id_strict",
+              "event_id_plus_timestamp"
+            ]
+          },
+          "malformedPolicy": {
+            "type": "string",
+            "enum": [
+              "quarantine_sha256",
+              "drop_and_count",
+              "halt_on_error"
+            ]
+          },
+          "timestampMode": {
+            "type": "string",
+            "enum": [
+              "utc_iso8601_strict",
+              "utc_coerced"
+            ]
+          },
+          "machineProfileMode": {
+            "type": "string",
+            "minLength": 2,
+            "maxLength": 48
+          },
+          "machinesPerLine": {
+            "anyOf": [
+              {
+                "type": "number",
+                "enum": [
+                  1
+                ]
+              },
+              {
+                "type": "number",
+                "enum": [
+                  2
+                ]
+              },
+              {
+                "type": "number",
+                "enum": [
+                  4
+                ]
+              },
+              {
+                "type": "number",
+                "enum": [
+                  8
+                ]
+              }
+            ]
+          },
+          "tempAnomalyThresholdC": {
+            "anyOf": [
+              {
+                "type": "number",
+                "enum": [
+                  75
+                ]
+              },
+              {
+                "type": "number",
+                "enum": [
+                  82
+                ]
+              },
+              {
+                "type": "number",
+                "enum": [
+                  90
+                ]
+              },
+              {
+                "type": "number",
+                "enum": [
+                  95
+                ]
+              }
+            ]
+          },
+          "vibrationP95Threshold": {
+            "anyOf": [
+              {
+                "type": "number",
+                "enum": [
+                  2.5
+                ]
+              },
+              {
+                "type": "number",
+                "enum": [
+                  3.5
+                ]
+              },
+              {
+                "type": "number",
+                "enum": [
+                  4.5
+                ]
+              },
+              {
+                "type": "number",
+                "enum": [
+                  6
+                ]
+              }
+            ]
+          },
+          "minValidSampleRatio": {
+            "anyOf": [
+              {
+                "type": "number",
+                "enum": [
+                  0.5
+                ]
+              },
+              {
+                "type": "number",
+                "enum": [
+                  0.75
+                ]
+              },
+              {
+                "type": "number",
+                "enum": [
+                  0.85
+                ]
+              },
+              {
+                "type": "number",
+                "enum": [
+                  0.95
+                ]
+              }
+            ]
+          },
+          "datasetVersion": {
+            "type": "string",
+            "enum": [
+              "v1.0.0",
+              "v1.1.0",
+              "v2.0.0-rc1"
+            ]
+          },
+          "storageTarget": {
+            "type": "string",
+            "enum": [
+              "garage-s3",
+              "rustfs-s3",
+              "local-fs"
+            ]
+          },
+          "parquetCompression": {
+            "type": "string",
+            "enum": [
+              "zstd",
+              "snappy",
+              "gzip"
+            ]
+          },
+          "partitionLayout": {
+            "type": "string",
+            "enum": [
+              "domain/dt",
+              "dt/machine_id",
+              "dt/line_id/machine_id",
+              "dt/hour/machine_id"
+            ]
+          },
+          "featureMartSink": {
+            "type": "string",
+            "enum": [
+              "postgres-upsert",
+              "parquet-only"
+            ]
+          },
+          "hotRetentionDays": {
+            "anyOf": [
+              {
+                "type": "number",
+                "enum": [
+                  7
+                ]
+              },
+              {
+                "type": "number",
+                "enum": [
+                  30
+                ]
+              },
+              {
+                "type": "number",
+                "enum": [
+                  90
+                ]
+              },
+              {
+                "type": "number",
+                "enum": [
+                  180
+                ]
+              }
+            ]
+          },
+          "coldRetentionDays": {
+            "anyOf": [
+              {
+                "type": "number",
+                "enum": [
+                  180
+                ]
+              },
+              {
+                "type": "number",
+                "enum": [
+                  365
+                ]
+              },
+              {
+                "type": "number",
+                "enum": [
+                  1095
+                ]
+              },
+              {
+                "type": "number",
+                "enum": [
+                  1825
+                ]
+              }
+            ]
+          },
+          "coldStorageEndpoint": {
+            "type": "string",
+            "enum": [
+              "garage-s3-cold",
+              "s3-glacier-compatible",
+              "nas-cold-archive"
+            ]
+          },
+          "lakehouseFormat": {
+            "type": "string",
+            "enum": [
+              "duckdb-parquet-compacted",
+              "hive-parquet-append"
+            ]
+          },
+          "compactionSchedule": {
+            "type": "string",
+            "enum": [
+              "hourly",
+              "daily-01utc",
+              "weekly-sun"
+            ]
+          },
+          "ingestTransport": {
+            "type": "string",
+            "enum": [
+              "local-segments",
+              "http-batch-ingest"
+            ]
+          },
+          "customMachineTopology": {
+            "type": "string",
+            "maxLength": 2000
+          },
+          "ignoredErrorCodes": {
+            "type": "string",
+            "maxLength": 1000
+          }
+        },
+        "additionalProperties": false
+      },
+      "LiveRunSnapshot": {
+        "type": "object",
+        "properties": {
+          "runId": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "running",
+              "paused",
+              "completed",
+              "stopped"
+            ]
+          },
+          "config": {
+            "type": "object",
+            "additionalProperties": {}
+          },
+          "startedAt": {
+            "type": "string"
+          },
+          "updatedAt": {
+            "type": "string"
+          },
+          "elapsedWallSec": {
+            "type": "number"
+          },
+          "elapsedSimSec": {
+            "type": "number"
+          },
+          "targetSimSec": {
+            "type": "number"
+          },
+          "progressPct": {
+            "type": "number"
+          },
+          "totalCallsEmitted": {
+            "type": "integer"
+          },
+          "targetTotalCalls": {
+            "type": "integer"
+          },
+          "effectiveRatePerSec": {
+            "type": "number"
+          },
+          "validEventsCount": {
+            "type": "integer"
+          },
+          "quarantinedCount": {
+            "type": "integer"
+          },
+          "outOfOrderCount": {
+            "type": "integer"
+          },
+          "rotatedSegmentsCount": {
+            "type": "integer"
+          },
+          "highWatermarkIso": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "expectedSampleSec": {
+            "type": "number"
+          },
+          "anomalousWindowsCount": {
+            "type": "integer"
+          },
+          "featureRowsCount": {
+            "type": "integer"
+          },
+          "tieringSummary": {
+            "type": "object",
+            "additionalProperties": {}
+          },
+          "recentLogs": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": {}
+            }
+          },
+          "segments": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": {}
+            }
+          },
+          "quarantineRecords": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": {}
+            }
+          },
+          "features": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": {}
+            }
+          },
+          "partitionPaths": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "runId",
+          "status",
+          "config",
+          "startedAt",
+          "updatedAt",
+          "elapsedWallSec",
+          "elapsedSimSec",
+          "targetSimSec",
+          "progressPct",
+          "totalCallsEmitted",
+          "targetTotalCalls",
+          "effectiveRatePerSec",
+          "validEventsCount",
+          "quarantinedCount",
+          "outOfOrderCount",
+          "rotatedSegmentsCount",
+          "highWatermarkIso",
+          "expectedSampleSec",
+          "anomalousWindowsCount",
+          "featureRowsCount",
+          "tieringSummary",
+          "recentLogs",
+          "segments",
+          "quarantineRecords",
+          "features",
+          "partitionPaths"
+        ]
+      },
+      "PipelineRunCreate": {
+        "type": "object",
+        "properties": {
+          "durationMinutes": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 1440
+          },
+          "eventsPerSec": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 50
+          },
+          "speedMultiplier": {
+            "anyOf": [
+              {
+                "type": "number",
+                "enum": [
+                  1
+                ]
+              },
+              {
+                "type": "number",
+                "enum": [
+                  10
+                ]
+              },
+              {
+                "type": "number",
+                "enum": [
+                  60
+                ]
+              },
+              {
+                "type": "number",
+                "enum": [
+                  300
+                ]
+              }
+            ]
+          },
+          "machineCount": {
+            "type": "integer",
+            "minimum": 2,
+            "maximum": 32
+          },
+          "windowMinutes": {
+            "anyOf": [
+              {
+                "type": "number",
+                "enum": [
+                  1
+                ]
+              },
+              {
+                "type": "number",
+                "enum": [
+                  5
+                ]
+              },
+              {
+                "type": "number",
+                "enum": [
+                  15
+                ]
+              }
+            ]
+          },
+          "machinesPerLine": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 16
+          },
+          "machineProfileMode": {
+            "type": "string"
+          },
+          "selectedPlcTypes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 32
+          },
+          "outputFields": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 30
+          },
+          "faultProbabilityPct": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 30
+          },
+          "malformedRatePct": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 25
+          },
+          "outOfOrderRatePct": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 30
+          },
+          "rotateMaxLines": {
+            "type": "integer",
+            "minimum": 100,
+            "maximum": 10000
+          },
+          "seed": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "durationMinutes",
+          "eventsPerSec",
+          "speedMultiplier",
+          "machineCount"
+        ],
+        "additionalProperties": {}
+      },
+      "LatestRunResponse": {
+        "type": "object",
+        "properties": {
+          "run": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/LiveRunSnapshot"
+              },
+              {
+                "type": [
+                  "object",
+                  "null"
+                ]
+              }
+            ]
+          }
+        },
+        "required": [
+          "run"
+        ]
+      },
+      "BaKpiResponse": {
+        "type": "object",
+        "properties": {
+          "generatedAt": {
+            "type": "string"
+          },
+          "dataSource": {
+            "type": "string",
+            "enum": [
+              "postgres",
+              "live-snapshot"
+            ]
+          },
+          "datasetVersion": {
+            "type": "string"
+          },
+          "filters": {
+            "type": "object",
+            "properties": {
+              "machineType": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "domain": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "fromDate": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "toDate": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "fields": {
+                "type": [
+                  "array",
+                  "null"
+                ],
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "required": [
+              "machineType",
+              "domain",
+              "fields"
+            ]
+          },
+          "rowCount": {
+            "type": "integer"
+          },
+          "rows": {
+            "type": "array",
+            "items": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/BusinessAnalyticsKpiRow"
+                },
+                {
+                  "type": "object",
+                  "additionalProperties": {}
+                }
+              ]
+            }
+          }
+        },
+        "required": [
+          "generatedAt",
+          "datasetVersion",
+          "filters",
+          "rowCount",
+          "rows"
+        ]
+      },
+      "BusinessAnalyticsKpiRow": {
+        "type": "object",
+        "properties": {
+          "dt": {
+            "type": "string"
+          },
+          "domain": {
+            "type": "string",
+            "enum": [
+              "manufacturing",
+              "gas-metering",
+              "power-generation"
+            ]
+          },
+          "line_id": {
+            "type": "string"
+          },
+          "machine_id": {
+            "type": "string"
+          },
+          "machine_type": {
+            "type": "string"
+          },
+          "observed_windows": {
+            "type": "integer"
+          },
+          "total_samples": {
+            "type": "integer"
+          },
+          "monitored_hours": {
+            "type": "number"
+          },
+          "downtime_fault_hours": {
+            "type": "number"
+          },
+          "availability_oee_pct": {
+            "type": "number"
+          },
+          "anomalous_windows": {
+            "type": "integer"
+          },
+          "primary_metric_name": {
+            "type": "string"
+          },
+          "primary_metric_unit": {
+            "type": "string"
+          },
+          "primary_metric_avg": {
+            "type": "number"
+          },
+          "estimated_energy_kwh": {
+            "type": "number"
+          },
+          "estimated_gas_volume_nm3": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "dt",
+          "domain",
+          "line_id",
+          "machine_id",
+          "machine_type",
+          "observed_windows",
+          "total_samples",
+          "monitored_hours",
+          "downtime_fault_hours",
+          "availability_oee_pct",
+          "anomalous_windows",
+          "primary_metric_name",
+          "primary_metric_unit",
+          "primary_metric_avg",
+          "estimated_energy_kwh",
+          "estimated_gas_volume_nm3"
+        ]
+      }
+    },
+    "parameters": {}
+  },
+  "paths": {
+    "/api/v1/version": {
+      "get": {
+        "tags": [
+          "Sistema & Diagnostica"
+        ],
+        "summary": "Versione release centralizzata della piattaforma, contratto API e metadati di build (anche su /version)",
+        "description": "Returns the single-source-of-truth platform version from config/app.json alongside optional CI/Docker build SHA and timestamp metadata.",
+        "responses": {
+          "200": {
+            "description": "Platform version & deployment metadata",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VersionResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/health": {
+      "get": {
+        "tags": [
+          "Sistema & Diagnostica"
+        ],
+        "summary": "Stato di salute del servizio e heartbeat del run attivo",
+        "description": "Public health endpoint used by Edge Collectors, Docker healthchecks, and load balancers.",
+        "responses": {
+          "200": {
+            "description": "Service healthy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/healthz": {
+      "get": {
+        "tags": [
+          "Sistema & Diagnostica"
+        ],
+        "summary": "Probe di liveness per Kubernetes / Docker",
+        "responses": {
+          "200": {
+            "description": "Process event loop alive",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {}
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/readyz": {
+      "get": {
+        "tags": [
+          "Sistema & Diagnostica"
+        ],
+        "summary": "Probe di readiness per Kubernetes / Docker",
+        "responses": {
+          "200": {
+            "description": "Ready to accept traffic",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {}
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Shutting down",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {}
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/metrics": {
+      "get": {
+        "tags": [
+          "Sistema & Diagnostica"
+        ],
+        "summary": "Endpoint di esposizione Prometheus OpenMetrics (montato anche su /metrics)",
+        "description": "Exposes HTTP throughput/latency histograms, telemetry ingestion & quarantine counters, alert delivery counts, DB status, and aggregate plant OEE gauges.",
+        "responses": {
+          "200": {
+            "description": "Prometheus text exposition format (0.0.4)",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/whoami": {
+      "get": {
+        "tags": [
+          "Sistema & Diagnostica"
+        ],
+        "summary": "Verifica la credenziale Bearer / X-API-Key attiva e lo scope concesso",
+        "description": "Diagnostic endpoint designed for Scalar & client verification. Returns the active scope (`admin`, `read`, `edge`, or `anonymous`) and whether strict auth enforcement is active. Rejects invalid credentials with `401 Unauthorized`.",
+        "security": [
+          {
+            "GatewayBearerAuth": []
+          },
+          {
+            "ApiKeyHeaderAuth": []
+          },
+          {
+            "GatewayHeaderAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Credential valid (or anonymous access when enforcement is disabled)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthWhoAmIResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Invalid credential",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/catalog/machines": {
+      "get": {
+        "tags": [
+          "Catalogo PLC & Contratto Output"
+        ],
+        "summary": "Elenca tutti i profili PLC e contatori industriali del catalogo (scope: read)",
+        "description": "Returns built-in (Siemens S7-1500, Rockwell ControlLogix, CNC, Gas Meter, Power Meter, Turbine) and custom registered PLC profiles, including their metric channels, thresholds, BA formulas, and parameterizable output fields.",
+        "security": [
+          {
+            "GatewayBearerAuth": []
+          },
+          {
+            "ApiKeyHeaderAuth": []
+          },
+          {
+            "GatewayHeaderAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "manufacturing",
+                "gas-metering",
+                "power-generation"
+              ]
+            },
+            "required": false,
+            "name": "domain",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "opcua",
+                "modbus-tcp",
+                "mqtt-sparkplug",
+                "http-rest-meter"
+              ]
+            },
+            "required": false,
+            "name": "protocol",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Catalog profiles list",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlcCatalogListResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Catalogo PLC & Contratto Output"
+        ],
+        "summary": "Registra o parametrizza un profilo PLC nel catalogo (scope: admin)",
+        "description": "Creates or updates a PLC / meter specification and its output field contract. Persisted atomically in `.state/plc-catalog.json` and immediately available in Live Simulation, Plant Connections, Edge Auto-Sync, and BA KPI endpoints.",
+        "security": [
+          {
+            "GatewayBearerAuth": []
+          },
+          {
+            "ApiKeyHeaderAuth": []
+          },
+          {
+            "GatewayHeaderAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "permissive",
+                "strict"
+              ],
+              "description": "Selects Tier 1 (permissive, default) or Tier 2 (strict) Zod validation enforcement.",
+              "example": "permissive"
+            },
+            "required": false,
+            "description": "Selects Tier 1 (permissive, default) or Tier 2 (strict) Zod validation enforcement.",
+            "name": "x-validation-mode",
+            "in": "header"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/PlcCatalogUpsertStrict"
+                  },
+                  {
+                    "$ref": "#/components/schemas/PlcCatalogUpsertPermissive"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Existing PLC profile updated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlcCatalogUpsertResponse"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "New PLC profile registered",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlcCatalogUpsertResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Insufficient scope (admin required)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/catalog/machines/{typeId}": {
+      "get": {
+        "tags": [
+          "Catalogo PLC & Contratto Output"
+        ],
+        "summary": "Recupera la specifica di un singolo profilo PLC (scope: read)",
+        "security": [
+          {
+            "GatewayBearerAuth": []
+          },
+          {
+            "ApiKeyHeaderAuth": []
+          },
+          {
+            "GatewayHeaderAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "typeId",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "PLC catalog profile",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlcCatalogProfile"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "PLC profile not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Catalogo PLC & Contratto Output"
+        ],
+        "summary": "Elimina un profilo PLC custom o ripristina un preset di fabbrica (scope: admin)",
+        "security": [
+          {
+            "GatewayBearerAuth": []
+          },
+          {
+            "ApiKeyHeaderAuth": []
+          },
+          {
+            "GatewayHeaderAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "typeId",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Profile removed or restored to factory preset",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlcCatalogDeleteResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "PLC profile not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/catalog/machines/{typeId}/preview-output": {
+      "post": {
+        "tags": [
+          "Catalogo PLC & Contratto Output"
+        ],
+        "summary": "Anteprima parametrizzata di telemetria, finestra ML e KPI BA (scope: read)",
+        "description": "Generates a sample Common Telemetry Envelope, parameterized ML Feature row (honoring `fields[]`), and BA KPI row based on the chosen PLC catalog definition.",
+        "security": [
+          {
+            "GatewayBearerAuth": []
+          },
+          {
+            "ApiKeyHeaderAuth": []
+          },
+          {
+            "GatewayHeaderAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "typeId",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PlcOutputPreviewRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Parameterized PLC output preview",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlcOutputPreviewResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "PLC profile not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/ingest/batch": {
+      "post": {
+        "tags": [
+          "Ingestione & Edge Gateway"
+        ],
+        "summary": "Acquisisce batch normalizzati Common Telemetry Envelope",
+        "description": "**Two-Tier Validation Contract:**\n- **Tier 1 (`permissive`, default):** Accepts `{ events: [...] }` or single `{ event: {...} }`, supports flat metrics or nested `metrics: {...}`, and isolates malformed individual records into the SHA-256 Quarantine Sink while returning `202 Accepted`.\n- **Tier 2 (`X-Validation-Mode: strict`):** Rejects the entire batch with `400 Bad Request` if any event violates strict ISO-8601 UTC, range, or schema rules.",
+        "security": [
+          {
+            "GatewayBearerAuth": []
+          },
+          {
+            "GatewayHeaderAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "permissive",
+                "strict"
+              ],
+              "description": "Selects Tier 1 (permissive, default) or Tier 2 (strict) Zod validation enforcement.",
+              "example": "permissive"
+            },
+            "required": false,
+            "description": "Selects Tier 1 (permissive, default) or Tier 2 (strict) Zod validation enforcement.",
+            "name": "x-validation-mode",
+            "in": "header"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/IngestBatchStrict"
+                  },
+                  {
+                    "$ref": "#/components/schemas/IngestBatchPermissive"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Batch processed into active ML/BA pipeline",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IngestBatchResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid Edge Gateway token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Batch exceeds 5,000 events per call",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/edge/config": {
+      "get": {
+        "tags": [
+          "Ingestione & Edge Gateway"
+        ],
+        "summary": "Configurazione auto-sync Plug & Play per Edge Collector",
+        "description": "Polled every 30s by Python `edge_gateway.collector` (`--config-url`) to hot-reload new PLC endpoints configured in the Web Console without restarting containers.",
+        "security": [
+          {
+            "GatewayBearerAuth": []
+          },
+          {
+            "GatewayHeaderAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Active PLC/Meter connections & ingest target hash",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EdgeSyncConfig"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid Edge Gateway token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/connections": {
+      "get": {
+        "tags": [
+          "Connessioni Impianto"
+        ],
+        "summary": "Elenca gli endpoint PLC e contatori industriali configurati (scope: read)",
+        "security": [
+          {
+            "GatewayBearerAuth": []
+          },
+          {
+            "ApiKeyHeaderAuth": []
+          },
+          {
+            "GatewayHeaderAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Network settings and connection list",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConnectionsStateResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Connessioni Impianto"
+        ],
+        "summary": "Crea o aggiorna un endpoint PLC/contatore (scope: admin)",
+        "security": [
+          {
+            "GatewayBearerAuth": []
+          },
+          {
+            "ApiKeyHeaderAuth": []
+          },
+          {
+            "GatewayHeaderAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "permissive",
+                "strict"
+              ],
+              "description": "Selects Tier 1 (permissive, default) or Tier 2 (strict) Zod validation enforcement.",
+              "example": "permissive"
+            },
+            "required": false,
+            "description": "Selects Tier 1 (permissive, default) or Tier 2 (strict) Zod validation enforcement.",
+            "name": "x-validation-mode",
+            "in": "header"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/ConnectionUpsertStrict"
+                  },
+                  {
+                    "$ref": "#/components/schemas/ConnectionUpsertPermissive"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Existing connection updated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConnectionUpsertResponse"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "New connection created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConnectionUpsertResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/connections/settings": {
+      "put": {
+        "tags": [
+          "Connessioni Impianto"
+        ],
+        "summary": "Aggiorna la topologia OT/IT aziendale e la policy di autenticazione (scope: admin)",
+        "security": [
+          {
+            "GatewayBearerAuth": []
+          },
+          {
+            "ApiKeyHeaderAuth": []
+          },
+          {
+            "GatewayHeaderAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "permissive",
+                "strict"
+              ],
+              "description": "Selects Tier 1 (permissive, default) or Tier 2 (strict) Zod validation enforcement.",
+              "example": "permissive"
+            },
+            "required": false,
+            "description": "Selects Tier 1 (permissive, default) or Tier 2 (strict) Zod validation enforcement.",
+            "name": "x-validation-mode",
+            "in": "header"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NetworkDeploymentSettingsInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Network settings updated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConnectionsStateResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/connections/gateway-token/rotate": {
+      "post": {
+        "tags": [
+          "Connessioni Impianto"
+        ],
+        "summary": "Emette o ruota il token Bearer dell'Edge Gateway (scope: admin)",
+        "description": "Returns the plaintext `gw_live_...` token once and stores only its SHA-256 hash.",
+        "security": [
+          {
+            "GatewayBearerAuth": []
+          },
+          {
+            "ApiKeyHeaderAuth": []
+          },
+          {
+            "GatewayHeaderAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "New Edge token issued",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GatewayTokenRotateResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/connections/api-keys/rotate": {
+      "post": {
+        "tags": [
+          "Connessioni Impianto"
+        ],
+        "summary": "Emette o ruota una chiave API scoped (`edge`, `read`, `admin`) (scope: admin)",
+        "description": "Generates a high-entropy scoped key (`gw_live_...`, `bi_live_...`, or `adm_live_...`), displays it once, and persists only its SHA-256 digest.",
+        "security": [
+          {
+            "GatewayBearerAuth": []
+          },
+          {
+            "ApiKeyHeaderAuth": []
+          },
+          {
+            "GatewayHeaderAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ScopedKeyRotateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "New scoped API key issued",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScopedKeyRotateResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid scope",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/connections/{id}/probe": {
+      "post": {
+        "tags": [
+          "Connessioni Impianto"
+        ],
+        "summary": "Esegue probe TCP/HTTP anti-SSRF di raggiungibilità e latenza RTT (scope: admin)",
+        "security": [
+          {
+            "GatewayBearerAuth": []
+          },
+          {
+            "ApiKeyHeaderAuth": []
+          },
+          {
+            "GatewayHeaderAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Socket probe result (reachable / SSRF_BLOCKED / ECONNREFUSED / ETIMEDOUT)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConnectionProbeResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Connection not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/connections/{id}/send-test-batch": {
+      "post": {
+        "tags": [
+          "Connessioni Impianto"
+        ],
+        "summary": "Invia un envelope di test live nella pipeline di ingestione (scope: admin)",
+        "security": [
+          {
+            "GatewayBearerAuth": []
+          },
+          {
+            "ApiKeyHeaderAuth": []
+          },
+          {
+            "GatewayHeaderAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "202": {
+            "description": "Test envelope ingested into active ML/BA run",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConnectionTestBatchResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Connection not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/connections/{id}": {
+      "delete": {
+        "tags": [
+          "Connessioni Impianto"
+        ],
+        "summary": "Rimuove un endpoint PLC/contatore configurato (scope: admin)",
+        "security": [
+          {
+            "GatewayBearerAuth": []
+          },
+          {
+            "ApiKeyHeaderAuth": []
+          },
+          {
+            "GatewayHeaderAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Connection deleted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConnectionDeleteResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Connection not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/connections/deploy-bundle": {
+      "get": {
+        "tags": [
+          "Connessioni Impianto"
+        ],
+        "summary": "Genera Docker Compose On-Premise, config Edge e script di installazione (scope: admin)",
+        "security": [
+          {
+            "GatewayBearerAuth": []
+          },
+          {
+            "ApiKeyHeaderAuth": []
+          },
+          {
+            "GatewayHeaderAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Generated deployment bundle",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OnPremDeployBundle"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/job/config": {
+      "get": {
+        "tags": [
+          "Job Pipeline & ML"
+        ],
+        "summary": "Recupera la policy attiva di Dataset Builder & Lakehouse (scope: read)",
+        "security": [
+          {
+            "GatewayBearerAuth": []
+          },
+          {
+            "ApiKeyHeaderAuth": []
+          },
+          {
+            "GatewayHeaderAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Active job configuration",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobConfigResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "Job Pipeline & ML"
+        ],
+        "summary": "Aggiorna e salva la policy di Dataset Builder e Tiering (scope: admin)",
+        "security": [
+          {
+            "GatewayBearerAuth": []
+          },
+          {
+            "ApiKeyHeaderAuth": []
+          },
+          {
+            "GatewayHeaderAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "permissive",
+                "strict"
+              ],
+              "description": "Selects Tier 1 (permissive, default) or Tier 2 (strict) Zod validation enforcement.",
+              "example": "permissive"
+            },
+            "required": false,
+            "description": "Selects Tier 1 (permissive, default) or Tier 2 (strict) Zod validation enforcement.",
+            "name": "x-validation-mode",
+            "in": "header"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/JobConfigInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Job configuration persisted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobConfigResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/pipeline/runs": {
+      "post": {
+        "tags": [
+          "Job Pipeline & ML"
+        ],
+        "summary": "Avvia flusso di simulazione telemetrica multi-dominio in tempo reale (scope: admin)",
+        "security": [
+          {
+            "GatewayBearerAuth": []
+          },
+          {
+            "ApiKeyHeaderAuth": []
+          },
+          {
+            "GatewayHeaderAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "permissive",
+                "strict"
+              ],
+              "description": "Selects Tier 1 (permissive, default) or Tier 2 (strict) Zod validation enforcement.",
+              "example": "permissive"
+            },
+            "required": false,
+            "description": "Selects Tier 1 (permissive, default) or Tier 2 (strict) Zod validation enforcement.",
+            "name": "x-validation-mode",
+            "in": "header"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PipelineRunCreate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Simulation stream started",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LiveRunSnapshot"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/pipeline/runs/latest": {
+      "get": {
+        "tags": [
+          "Job Pipeline & ML"
+        ],
+        "summary": "Recupera l'ultimo snapshot di esecuzione (finestre ML, log, quarantena, tiering) (scope: read)",
+        "security": [
+          {
+            "GatewayBearerAuth": []
+          },
+          {
+            "ApiKeyHeaderAuth": []
+          },
+          {
+            "GatewayHeaderAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Latest snapshot or null",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LatestRunResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/pipeline/runs/{id}/pause": {
+      "post": {
+        "tags": [
+          "Job Pipeline & ML"
+        ],
+        "summary": "Mette in pausa il flusso di simulazione attivo (scope: admin)",
+        "security": [
+          {
+            "GatewayBearerAuth": []
+          },
+          {
+            "ApiKeyHeaderAuth": []
+          },
+          {
+            "GatewayHeaderAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Run paused",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LiveRunSnapshot"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Simulation run not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/pipeline/runs/{id}/resume": {
+      "post": {
+        "tags": [
+          "Job Pipeline & ML"
+        ],
+        "summary": "Riprende un flusso di simulazione in pausa (scope: admin)",
+        "security": [
+          {
+            "GatewayBearerAuth": []
+          },
+          {
+            "ApiKeyHeaderAuth": []
+          },
+          {
+            "GatewayHeaderAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Run resumed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LiveRunSnapshot"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Simulation run not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/pipeline/runs/{id}/stop": {
+      "post": {
+        "tags": [
+          "Job Pipeline & ML"
+        ],
+        "summary": "Arresta un flusso di simulazione attivo o in pausa (scope: admin)",
+        "security": [
+          {
+            "GatewayBearerAuth": []
+          },
+          {
+            "ApiKeyHeaderAuth": []
+          },
+          {
+            "GatewayHeaderAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Run stopped",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LiveRunSnapshot"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Simulation run not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/ba/kpi": {
+      "get": {
+        "tags": [
+          "Business Analytics (Grafana & Power BI)"
+        ],
+        "summary": "Interroga KPI giornalieri OEE, energia (kWh) e volume gas (Nm3) (scope: read)",
+        "description": "Power BI Web Connector & Grafana JSON/CSV feed. Supports `?machineType=<typeId>`, `?domain=<domain>`, `?fields=col1,col2,...`, and `?format=csv` (RFC 4180 formula-safe CSV) for Excel/Power BI direct import.",
+        "security": [
+          {
+            "GatewayBearerAuth": []
+          },
+          {
+            "ApiKeyHeaderAuth": []
+          },
+          {
+            "GatewayHeaderAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": false,
+            "name": "machineType",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "manufacturing",
+                "gas-metering",
+                "power-generation"
+              ]
+            },
+            "required": false,
+            "name": "domain",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": false,
+            "name": "fromDate",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": false,
+            "name": "toDate",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "auto",
+                "postgres",
+                "live"
+              ]
+            },
+            "required": false,
+            "name": "source",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": false,
+            "name": "fields",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "json",
+                "csv"
+              ]
+            },
+            "required": false,
+            "name": "format",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Daily KPI rollup ready for Power BI / Grafana / Controllo di Gestione",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BaKpiResponse"
+                }
+              },
+              "text/csv": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/alerts": {
+      "get": {
+        "tags": [
+          "Notifiche & Alert (SMTP / Mailpit & Webhook)"
+        ],
+        "summary": "Recupera config canali SMTP/Mailpit e Webhook, regole alert ed eventi recenti (scope: read)",
+        "security": [
+          {
+            "GatewayBearerAuth": []
+          },
+          {
+            "ApiKeyHeaderAuth": []
+          },
+          {
+            "GatewayHeaderAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Alerts & notification channel state",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {}
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/alerts/channels": {
+      "put": {
+        "tags": [
+          "Notifiche & Alert (SMTP / Mailpit & Webhook)"
+        ],
+        "summary": "Aggiorna i canali di notifica SMTP / Mailpit e Webhook HTTP (scope: admin)",
+        "security": [
+          {
+            "GatewayBearerAuth": []
+          },
+          {
+            "ApiKeyHeaderAuth": []
+          },
+          {
+            "GatewayHeaderAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "smtp": {
+                    "type": "object",
+                    "additionalProperties": {}
+                  },
+                  "webhook": {
+                    "type": "object",
+                    "additionalProperties": {}
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Channels updated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {}
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/alerts/rules": {
+      "post": {
+        "tags": [
+          "Notifiche & Alert (SMTP / Mailpit & Webhook)"
+        ],
+        "summary": "Crea o aggiorna una regola alert di soglia telemetrica (scope: admin)",
+        "security": [
+          {
+            "GatewayBearerAuth": []
+          },
+          {
+            "ApiKeyHeaderAuth": []
+          },
+          {
+            "GatewayHeaderAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": {}
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Alert rule saved",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {}
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/alerts/test-channel": {
+      "post": {
+        "tags": [
+          "Notifiche & Alert (SMTP / Mailpit & Webhook)"
+        ],
+        "summary": "Invia email di test live via SMTP/Mailpit o HTTP POST via Webhook (scope: admin)",
+        "security": [
+          {
+            "GatewayBearerAuth": []
+          },
+          {
+            "ApiKeyHeaderAuth": []
+          },
+          {
+            "GatewayHeaderAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "channel": {
+                    "type": "string",
+                    "enum": [
+                      "email",
+                      "webhook"
+                    ]
+                  },
+                  "recipient": {
+                    "type": "string"
+                  },
+                  "webhookUrl": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "channel"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Test delivery succeeded",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {}
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Target SMTP/Webhook unreachable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {}
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/alerts/smtp/verify": {
+      "post": {
+        "tags": [
+          "Notifiche & Alert (SMTP / Mailpit & Webhook)"
+        ],
+        "summary": "Verifica handshake TCP/EHLO/AUTH del server SMTP attivo (scope: admin)",
+        "security": [
+          {
+            "GatewayBearerAuth": []
+          },
+          {
+            "ApiKeyHeaderAuth": []
+          },
+          {
+            "GatewayHeaderAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "SMTP server handshake verified",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {}
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "SMTP server unreachable or auth rejected",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {}
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/alerts/smtp/send-test": {
+      "post": {
+        "tags": [
+          "Notifiche & Alert (SMTP / Mailpit & Webhook)"
+        ],
+        "summary": "Invia email diagnostica personalizzata con i parametri SMTP configurati (scope: admin)",
+        "security": [
+          {
+            "GatewayBearerAuth": []
+          },
+          {
+            "ApiKeyHeaderAuth": []
+          },
+          {
+            "GatewayHeaderAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "recipient": {
+                    "type": "string"
+                  },
+                  "subject": {
+                    "type": "string"
+                  },
+                  "body": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Diagnostic email accepted by SMTP server",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {}
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "SMTP delivery failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {}
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/alerts/mailpit/status": {
+      "get": {
+        "tags": [
+          "Notifiche & Alert (SMTP / Mailpit & Webhook)"
+        ],
+        "summary": "Interroga stato connessione API Mailpit, coda e statistiche runtime (scope: read)",
+        "security": [
+          {
+            "GatewayBearerAuth": []
+          },
+          {
+            "ApiKeyHeaderAuth": []
+          },
+          {
+            "GatewayHeaderAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": false,
+            "name": "apiBaseUrl",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Mailpit connection & queue status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {}
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Mailpit API unreachable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {}
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/alerts/mailpit/messages": {
+      "get": {
+        "tags": [
+          "Notifiche & Alert (SMTP / Mailpit & Webhook)"
+        ],
+        "summary": "Interroga i messaggi email catturati tramite API REST Mailpit (scope: read)",
+        "security": [
+          {
+            "GatewayBearerAuth": []
+          },
+          {
+            "ApiKeyHeaderAuth": []
+          },
+          {
+            "GatewayHeaderAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "required": false,
+            "name": "limit",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": false,
+            "name": "query",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": false,
+            "name": "apiBaseUrl",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Mailpit inbox messages",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {}
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Mailpit API unreachable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {}
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Notifiche & Alert (SMTP / Mailpit & Webhook)"
+        ],
+        "summary": "Svuota tutti i messaggi catturati nella casella Mailpit (scope: admin)",
+        "security": [
+          {
+            "GatewayBearerAuth": []
+          },
+          {
+            "ApiKeyHeaderAuth": []
+          },
+          {
+            "GatewayHeaderAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": false,
+            "name": "apiBaseUrl",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Mailpit inbox cleared",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {}
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Mailpit API unreachable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {}
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/alerts/mailpit/messages/{id}": {
+      "get": {
+        "tags": [
+          "Notifiche & Alert (SMTP / Mailpit & Webhook)"
+        ],
+        "summary": "Ispeziona corpo, HTML e intestazioni di un singolo messaggio Mailpit (scope: read)",
+        "security": [
+          {
+            "GatewayBearerAuth": []
+          },
+          {
+            "ApiKeyHeaderAuth": []
+          },
+          {
+            "GatewayHeaderAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": false,
+            "name": "apiBaseUrl",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Mailpit message detail",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {}
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Mailpit API unreachable or message not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {}
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/login": {
+      "post": {
+        "tags": [
+          "Utenti, RBAC & Registro Audit"
+        ],
+        "summary": "Autentica operatore con email e password per emettere un token di sessione revocabile",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "email": {
+                    "type": "string",
+                    "format": "email"
+                  },
+                  "password": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                },
+                "required": [
+                  "email",
+                  "password"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Session issued",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {}
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Invalid credentials",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/users": {
+      "get": {
+        "tags": [
+          "Utenti, RBAC & Registro Audit"
+        ],
+        "summary": "Elenca gli account operatori RBAC (scope: read)",
+        "security": [
+          {
+            "GatewayBearerAuth": []
+          },
+          {
+            "ApiKeyHeaderAuth": []
+          },
+          {
+            "GatewayHeaderAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "User list",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {}
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Utenti, RBAC & Registro Audit"
+        ],
+        "summary": "Crea un nuovo utente RBAC (admin / operator / viewer) (scope: admin)",
+        "security": [
+          {
+            "GatewayBearerAuth": []
+          },
+          {
+            "ApiKeyHeaderAuth": []
+          },
+          {
+            "GatewayHeaderAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "email": {
+                    "type": "string",
+                    "format": "email"
+                  },
+                  "fullName": {
+                    "type": "string"
+                  },
+                  "role": {
+                    "type": "string",
+                    "enum": [
+                      "admin",
+                      "operator",
+                      "viewer"
+                    ]
+                  },
+                  "password": {
+                    "type": "string",
+                    "minLength": 8
+                  }
+                },
+                "required": [
+                  "email",
+                  "fullName",
+                  "role",
+                  "password"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "User created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {}
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/audit/logs": {
+      "get": {
+        "tags": [
+          "Utenti, RBAC & Registro Audit"
+        ],
+        "summary": "Interroga il Registro Audit immutabile (JSON o CSV) (scope: read)",
+        "security": [
+          {
+            "GatewayBearerAuth": []
+          },
+          {
+            "ApiKeyHeaderAuth": []
+          },
+          {
+            "GatewayHeaderAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": false,
+            "name": "action",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": false,
+            "name": "actor",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "ok",
+                "denied",
+                "error"
+              ]
+            },
+            "required": false,
+            "name": "status",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "required": false,
+            "name": "limit",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "json",
+                "csv"
+              ]
+            },
+            "required": false,
+            "name": "format",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Audit log entries",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {}
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/roles/permissions": {
+      "get": {
+        "tags": [
+          "Utenti, RBAC & Registro Audit"
+        ],
+        "summary": "Ottiene la Matrice Permessi Ruoli ERP configurabile (viste menu e capacità) (scope: read)",
+        "security": [
+          {
+            "GatewayBearerAuth": []
+          },
+          {
+            "ApiKeyHeaderAuth": []
+          },
+          {
+            "GatewayHeaderAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Role permissions matrix",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {}
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "Utenti, RBAC & Registro Audit"
+        ],
+        "summary": "Aggiorna la Matrice Permessi Ruoli ERP per operator e viewer (admin resta bloccato su accesso completo) (scope: admin)",
+        "security": [
+          {
+            "GatewayBearerAuth": []
+          },
+          {
+            "ApiKeyHeaderAuth": []
+          },
+          {
+            "GatewayHeaderAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "matrix": {
+                    "type": "object",
+                    "additionalProperties": {}
+                  }
+                },
+                "required": [
+                  "matrix"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated role permissions matrix",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {}
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden (admin role required)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {}
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/tokens": {
+      "get": {
+        "tags": [
+          "Utenti, RBAC & Registro Audit"
+        ],
+        "summary": "Elenca le chiavi API gestite e la telemetria d'uso (segreti mai restituiti) (scope: read)",
+        "description": "Returns metadata, scopes, expiration, last-used IP, and call counters for all issued `pat_live_...` API keys. Plaintext keys are never stored; only AES-256-GCM encrypted SHA-256 hashes persist at rest.",
+        "security": [
+          {
+            "GatewayBearerAuth": []
+          },
+          {
+            "ApiKeyHeaderAuth": []
+          },
+          {
+            "GatewayHeaderAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Managed API key inventory and summary counts",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {}
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Utenti, RBAC & Registro Audit"
+        ],
+        "summary": "Emette una nuova X-API-Key scoped (mostrata una sola volta, cifrata at rest) (scope: admin)",
+        "description": "Generates a high-entropy `pat_live_...` API key bound to an owner account and least-privilege scopes (`read`, `edge`, `admin`) with optional TTL. The plaintext key is returned once in the response and immediately protected at rest via AES-256-GCM over its SHA-256 digest.",
+        "security": [
+          {
+            "GatewayBearerAuth": []
+          },
+          {
+            "ApiKeyHeaderAuth": []
+          },
+          {
+            "GatewayHeaderAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "minLength": 2,
+                    "maxLength": 80
+                  },
+                  "description": {
+                    "type": "string",
+                    "maxLength": 240
+                  },
+                  "scopes": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "enum": [
+                        "read",
+                        "edge",
+                        "admin"
+                      ]
+                    },
+                    "minItems": 1
+                  },
+                  "ttlHours": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "maximum": 87600
+                  },
+                  "ownerUserId": {
+                    "type": "string"
+                  },
+                  "ownerEmail": {
+                    "type": "string",
+                    "format": "email"
+                  },
+                  "isSandbox": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "name",
+                  "scopes"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "API key issued (plaintext shown once)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {}
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid key parameters",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden (admin required)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/tokens/sandbox": {
+      "post": {
+        "tags": [
+          "Utenti, RBAC & Registro Audit"
+        ],
+        "summary": "Genera una X-API-Key sandbox da 1 ora per test su Scalar o integrazioni",
+        "description": "Issues a bounded 1-hour sandbox API key (`pat_live_...`). In strict auth mode (`API_ENFORCE_AUTH=true`), requires valid operator email & password or an active admin credential; in local dev mode, accepts a test role preset (`admin`, `operator`, `viewer`).",
+        "security": [
+          {
+            "GatewayBearerAuth": []
+          },
+          {
+            "ApiKeyHeaderAuth": []
+          },
+          {
+            "GatewayHeaderAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "email": {
+                    "type": "string",
+                    "format": "email"
+                  },
+                  "password": {
+                    "type": "string"
+                  },
+                  "role": {
+                    "type": "string",
+                    "enum": [
+                      "admin",
+                      "operator",
+                      "viewer"
+                    ]
+                  },
+                  "name": {
+                    "type": "string",
+                    "maxLength": 80
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "1-hour sandbox API key minted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {}
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required in strict mode",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/tokens/{id}/rotate": {
+      "post": {
+        "tags": [
+          "Utenti, RBAC & Registro Audit"
+        ],
+        "summary": "Ruota atomicamente una chiave API (revoca la precedente e restituisce il nuovo segreto una volta) (scope: admin)",
+        "security": [
+          {
+            "GatewayBearerAuth": []
+          },
+          {
+            "ApiKeyHeaderAuth": []
+          },
+          {
+            "GatewayHeaderAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Replacement API key issued and previous key revoked",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {}
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "API key not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/tokens/{id}": {
+      "delete": {
+        "tags": [
+          "Utenti, RBAC & Registro Audit"
+        ],
+        "summary": "Revoca immediatamente una chiave API (scope: admin)",
+        "security": [
+          {
+            "GatewayBearerAuth": []
+          },
+          {
+            "ApiKeyHeaderAuth": []
+          },
+          {
+            "GatewayHeaderAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "API key revoked",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {}
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "API key not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "webhooks": {}
+}

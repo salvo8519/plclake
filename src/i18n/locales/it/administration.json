@@ -1,0 +1,307 @@
+{
+  "users": {
+    "title": "Utenti Impianto",
+    "subtitle": "Gestisci directory operatori, sessioni revocabili autenticate con scrypt e stato del ciclo di vita degli account.",
+    "addUser": "Crea Utente",
+    "addFirstUser": "Aggiungi Primo Utente",
+    "searchPlaceholder": "Cerca per email, nome o ruolo...",
+    "filterAllRoles": "Tutti i Ruoli",
+    "loading": "Caricamento account operatore...",
+    "empty": "Nessun account utente configurato finora.",
+    "youBadge": "(Tu)",
+    "never": "Mai",
+    "active": "Attivo",
+    "disabled": "Disabilitato",
+    "table": {
+      "colEmail": "Email",
+      "colFullName": "Nome Completo",
+      "colRole": "Ruolo",
+      "colLastLogin": "Ultimo Accesso (UTC)",
+      "colStatus": "Stato",
+      "colActions": "Azioni",
+      "actionsAria": "Azioni per {{email}}",
+      "editUser": "Modifica Utente",
+      "disableAccount": "Disabilita Account",
+      "enableAccount": "Abilita Account"
+    },
+    "drawer": {
+      "titleEdit": "Modifica Utente — {{email}}",
+      "titleNew": "Nuovo Account Utente Impianto",
+      "subtitleEdit": "Aggiorna ruolo assegnato, stato dell'account o reimposta la password.",
+      "subtitleNew": "Crea un nuovo account operatore con hashing password scrypt.",
+      "saveChanges": "Salva Modifiche",
+      "createAccount": "Crea Account",
+      "workEmail": "Email Aziendale",
+      "fullName": "Nome Completo",
+      "assignedRole": "Ruolo Assegnato",
+      "roleAdminDesc": "admin — Accesso amministrativo completo",
+      "roleOperatorDesc": "operator — Operatività impianto e allerte",
+      "roleViewerDesc": "viewer — Monitoraggio BI e audit in sola lettura",
+      "resetPasswordLabel": "Reimposta Password (opzionale, min 8 caratteri)",
+      "initialPasswordLabel": "Password Iniziale (min 8 caratteri)",
+      "resetPasswordPlaceholder": "Lascia vuoto per mantenere la password attuale",
+      "initialPasswordPlaceholder": "Minimo 8 caratteri",
+      "accountActive": "Account Attivo (deselezionando si revocano subito le sessioni attive)"
+    },
+    "messages": {
+      "errFullNameRequired": "Il nome completo è obbligatorio.",
+      "errResetPasswordMin": "La nuova password deve avere almeno 8 caratteri (oppure lasciala vuota per mantenere l'attuale).",
+      "errEmailRequired": "L'email aziendale è obbligatoria.",
+      "errInitialPasswordMin": "La password iniziale deve avere almeno 8 caratteri.",
+      "errUpdateStatus": "Impossibile aggiornare l'utente ({{status}})",
+      "errCreateStatus": "Impossibile creare l'utente ({{status}})",
+      "errSaveGeneric": "Impossibile salvare l'account utente",
+      "updatedOk": "Account utente {{email}} aggiornato.",
+      "createdOk": "Account {{email}} creato (password cifrata con scrypt).",
+      "errStatusToggle": "Impossibile aggiornare lo stato dell'utente.",
+      "statusActiveOk": "{{email}} è ora attivo.",
+      "statusDisabledOk": "{{email}} è ora disabilitato (sessioni revocate).",
+      "errSaveMatrixStatus": "Impossibile salvare i permessi dei ruoli ({{status}})",
+      "errSaveMatrixGeneric": "Impossibile salvare i permessi dei ruoli",
+      "matrixSavedOk": "Matrice permessi salvata. Menu di navigazione e policy di accesso aggiornati."
+    },
+    "pagination": {
+      "accounts": "account"
+    }
+  },
+  "roleMatrix": {
+    "title": "Accessi e Permessi per Ruolo",
+    "subtitle": "Confronta e modifica simultaneamente la visibilità delle viste di menu e le capacità operative di tutti i ruoli.",
+    "readOnlyHint": "Sola lettura (richiesto Amministratore)",
+    "unsavedChanges": "Modifiche non salvate",
+    "discard": "Annulla",
+    "resetDefaults": "Ripristina Predefiniti",
+    "savePermissions": "Salva Permessi Ruoli",
+    "saving": "Salvataggio...",
+    "savedAt": "Salvato il {{timestamp}}",
+    "helperHint": "Usa le caselle di intestazione di gruppo per attivare o disattivare un'intera sezione di menu. Ogni ruolo configurabile deve mantenere almeno 1 vista attiva.",
+    "accountsAcrossRoles": "{{count}} {{accountWord}} su {{roles}} ruoli",
+    "accountSingular": "account",
+    "accountPlural": "account",
+    "columnHeader": "Vista Menu / Permesso Operativo",
+    "roleMeta": "{{users}} {{userWord}} · {{views}}/{{total}} viste",
+    "userSingular": "utente",
+    "userPlural": "utenti",
+    "groupMenuViews": "Viste Menu {{group}}",
+    "capabilitiesHeader": "Capacità Operative e Azioni",
+    "minViewTitle": "Almeno una vista di menu deve rimanere abilitata per questo ruolo",
+    "ariaAdminGroup": "Accesso Admin a tutte le viste {{group}}",
+    "ariaToggleGroup": "Attiva/disattiva tutte le viste {{group}} per {{role}}",
+    "ariaAdminView": "Accesso Admin a {{view}}",
+    "ariaRoleView": "Accesso {{role}} a {{view}}",
+    "ariaAdminCaps": "Admin dispone di tutte le capacità operative",
+    "ariaToggleCaps": "Attiva/disattiva tutte le capacità operative per {{role}}",
+    "ariaAdminCap": "Capacità Admin {{cap}}",
+    "ariaRoleCap": "Capacità {{role}} {{cap}}",
+    "groups": {
+      "Operations": "Operazioni",
+      "Configuration": "Configurazione",
+      "Administration": "Amministrazione"
+    },
+    "views": {
+      "workbench": {
+        "label": "Simulazione Live",
+        "summary": "Workbench flussi in tempo reale, coda telemetrica e feed anomalie"
+      },
+      "fleet": {
+        "label": "Valutazione Flotta",
+        "summary": "Rollup KPI, metriche di disponibilità e ispezione pacchetti in quarantena"
+      },
+      "connections": {
+        "label": "Connessioni Impianto",
+        "summary": "Endpoint OT, target gateway OPC-UA / Modbus / MQTT"
+      },
+      "plc_catalog": {
+        "label": "Catalogo PLC",
+        "summary": "Schemi macchina, mappatura registri e profili PLC personalizzati"
+      },
+      "job_config": {
+        "label": "Configurazione Job",
+        "summary": "Soglie di windowing, policy watermark e retention storage"
+      },
+      "notifications": {
+        "label": "Notifiche e Allerte",
+        "summary": "Coda allerte, canali SMTP / Webhook e diagnostica Mailpit"
+      },
+      "users": {
+        "label": "Utenti",
+        "summary": "Directory operatori, credenziali e ciclo di vita degli account"
+      },
+      "roles": {
+        "label": "Ruoli e Permessi",
+        "summary": "Policy RBAC per ruolo, visibilità viste di menu e capacità operative"
+      },
+      "tokens": {
+        "label": "Token API",
+        "summary": "Ciclo di vita X-API-Key scoped, hash cifrati AES-256-GCM e test Scalar"
+      },
+      "audit": {
+        "label": "Registro Audit",
+        "summary": "Tracciamento immutabile di accessi, configurazioni ed eventi operativi"
+      }
+    },
+    "capabilities": {
+      "canControlSimulation": {
+        "label": "Controlla Simulazione Live",
+        "description": "Avvia, metti in pausa, riprendi e arresta le simulazioni di flusso"
+      },
+      "canWriteConfig": {
+        "label": "Modifica Catalogo, Connessioni e Policy Job",
+        "description": "Crea/modifica schemi PLC, connessioni OT e parametri della pipeline"
+      },
+      "canManageAlerts": {
+        "label": "Gestisci Allerte e Diagnostica",
+        "description": "Prendi in carico allerte, modifica canali SMTP/Webhook, esegui diagnostica Mailpit"
+      },
+      "canManageUsers": {
+        "label": "Gestisci Utenti e Matrice Ruoli",
+        "description": "Crea account, cambia ruoli e configura la visibilità dei menu RBAC"
+      }
+    },
+    "roles": {
+      "admin": "Admin",
+      "operator": "Operatore",
+      "viewer": "Visualizzatore"
+    }
+  },
+  "audit": {
+    "title": "Registro Immutabile di Audit Sicurezza e Operazioni",
+    "subtitle": "Traccia ogni evento di autenticazione, modifica RBAC, variazione catalogo PLC, rotazione chiavi e presa in carico allerte.",
+    "refresh": "Aggiorna",
+    "exportCsv": "Esporta CSV",
+    "filters": {
+      "actorPlaceholder": "Filtra attore (email o chiave)...",
+      "actorAria": "Filtra per attore",
+      "actionPlaceholder": "Filtra azione (POST /users)...",
+      "actionAria": "Filtra per azione",
+      "outcomeAria": "Filtra per esito",
+      "outcomeAll": "Tutti gli Esiti",
+      "outcomeOk": "OK (2xx)",
+      "outcomeDenied": "Negato (401/403)",
+      "outcomeError": "Errore (4xx/5xx)",
+      "limitAria": "Limite righe",
+      "limitOption": "Ultimi {{count}} eventi",
+      "showingEvents": "Visualizzati {{count}} evento/i"
+    },
+    "table": {
+      "colTimestamp": "Timestamp (UTC)",
+      "colActor": "Attore e Ruolo",
+      "colAction": "Azione",
+      "colResource": "Risorsa",
+      "colOutcome": "Esito",
+      "colRequestId": "ID Richiesta",
+      "loading": "Caricamento registro audit...",
+      "empty": "Nessuna voce del registro audit corrisponde ai filtri attivi."
+    },
+    "pagination": {
+      "events": "eventi audit"
+    }
+  },
+  "tokens": {
+    "title": "Gestione Chiavi e Token API",
+    "subtitle": "Emetti, ruota e revoca credenziali X-API-Key scoped per integrazioni ERP, BI, SCADA ed Edge. Le chiavi in chiaro sono mostrate una sola volta e salvate cifrate at rest (AES-256-GCM su SHA-256).",
+    "mintSandbox": "Genera Chiave Test 1h",
+    "mintingSandbox": "Generazione...",
+    "issueKey": "Emetti Chiave API",
+    "openScalar": "Apri API Scalar",
+    "readOnlyHint": "Sola lettura (richiesto Admin per emettere o revocare chiavi)",
+    "kpi": {
+      "activeKeys": "Chiavi Attive",
+      "activeSub": "Cifrate at rest (AES-256-GCM)",
+      "totalCalls": "Chiamate API Autenticate",
+      "totalCallsSub": "Tracciate in Audit & Log JSON",
+      "expiringSoon": "In Scadenza entro 7 Giorni",
+      "expiringSoonSub": "Ruotare prima della scadenza TTL",
+      "revokedExpired": "Revocate / Scadute",
+      "revokedExpiredSub": "Conservate per tracciabilità audit"
+    },
+    "reveal": {
+      "title": "Nuova Chiave API Emessa — Copia Ora (Visibile Una Sola Volta)",
+      "warning": "Per sicurezza la chiave in chiaro non viene mai salvata sul server e non potrà più essere visualizzata dopo la chiusura di questo banner.",
+      "copyKey": "Copia X-API-Key",
+      "copiedKey": "Chiave Copiata",
+      "copyCurl": "Copia Test cURL",
+      "copiedCurl": "cURL Copiato",
+      "testInScalar": "Testa in Scalar",
+      "dismiss": "Chiudi"
+    },
+    "filters": {
+      "searchPlaceholder": "Cerca nome chiave, prefisso o proprietario...",
+      "searchAria": "Cerca chiavi API",
+      "all": "Tutte",
+      "active": "Attive",
+      "inactive": "Revocate e Scadute"
+    },
+    "table": {
+      "colName": "Nome Chiave e Prefisso",
+      "colOwner": "Account Proprietario",
+      "colScopes": "Scope",
+      "colStatus": "Stato",
+      "colUsage": "Utilizzo e Ultimo Accesso",
+      "colExpiry": "Scadenza (UTC)",
+      "colActions": "Azioni",
+      "sandboxTag": "SANDBOX",
+      "neverUsed": "Mai usata",
+      "noExpiry": "Nessuna scadenza",
+      "callsCount": "{{count}} chiamate",
+      "actionsAria": "Azioni per {{name}}",
+      "rotateKey": "Ruota Chiave",
+      "revokeKey": "Revoca Chiave",
+      "copyPrefix": "Copia Prefisso",
+      "inspectAudit": "Ispeziona Registro Audit",
+      "loading": "Caricamento chiavi API gestite...",
+      "empty": "Nessuna chiave API corrisponde al filtro attivo.",
+      "emptyInitial": "Nessuna chiave API emessa finora. Creane una per integrare sistemi esterni tramite X-API-Key."
+    },
+    "status": {
+      "active": "Attiva",
+      "expired": "Scaduta",
+      "revoked": "Revocata"
+    },
+    "scopes": {
+      "read": "read",
+      "edge": "edge",
+      "admin": "admin",
+      "readDesc": "Lettura KPI, catalogo PLC, snapshot live e feed audit (BI / Grafana / ERP)",
+      "edgeDesc": "Invio batch telemetrici e sync config collector OT (Edge Gateway / Bridge PLC)",
+      "adminDesc": "Scrittura amministrativa completa: catalogo, connessioni, allerte, utenti e gestione chiavi"
+    },
+    "drawer": {
+      "title": "Emetti Nuova Chiave API",
+      "subtitle": "Genera una X-API-Key revocabile associata a scope a privilegi minimi e a un account proprietario.",
+      "keyName": "Nome Chiave",
+      "keyNamePlaceholder": "es. Power BI Analisi Impianto, Worker Sync MES",
+      "description": "Scopo Integrazione (opzionale)",
+      "descriptionPlaceholder": "Descrivi il sistema esterno o la pipeline che utilizza questa chiave",
+      "owner": "Account Proprietario (Attribuzione Audit)",
+      "scopesLabel": "Scope Autorizzati (Privilegi Minimi)",
+      "ttlLabel": "Policy di Scadenza (TTL)",
+      "ttl1h": "1 ora (Sandbox / Test)",
+      "ttl24h": "24 ore (Integrazione temporanea)",
+      "ttl7d": "7 giorni",
+      "ttl30d": "30 giorni",
+      "ttl90d": "90 giorni (Consigliato produzione)",
+      "ttl365d": "365 giorni",
+      "ttlNever": "Nessuna scadenza (Solo rotazione manuale)",
+      "submit": "Genera Chiave API",
+      "submitting": "Generazione..."
+    },
+    "messages": {
+      "errNameRequired": "Il nome della chiave deve avere almeno 2 caratteri.",
+      "errScopeRequired": "Seleziona almeno uno scope di autorizzazione.",
+      "errLoad": "Impossibile caricare le chiavi API ({{status}})",
+      "errIssue": "Impossibile emettere la chiave API ({{status}})",
+      "errSandbox": "Impossibile generare la chiave sandbox ({{status}})",
+      "errRotate": "Impossibile ruotare la chiave API ({{status}})",
+      "errRevoke": "Impossibile revocare la chiave API ({{status}})",
+      "issuedOk": "Chiave API \"{{name}}\" emessa. Copiala dal banner sicuro qui sotto.",
+      "sandboxOk": "Chiave di test sandbox 1h \"{{name}}\" generata. Clicca \"Testa in Scalar\" per provare subito gli endpoint.",
+      "rotatedOk": "Chiave \"{{name}}\" ruotata: la chiave precedente è stata revocata e la sostitutiva è pronta.",
+      "revokedOk": "Chiave API \"{{name}}\" revocata. Tutte le richieste successive con questa chiave riceveranno 401.",
+      "prefixCopied": "Prefisso chiave {{prefix}} copiato negli appunti."
+    },
+    "pagination": {
+      "keys": "chiavi API"
+    }
+  }
+}

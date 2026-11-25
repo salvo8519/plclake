@@ -1,0 +1,20 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.venv/
+venv/
+dist/
+build/
+
+# Local data and generated artifacts
+*.jsonl
+*.parquet
+logs/
+ml_dataset/
+data/
+
+# Environment & OS
+.env
+.DS_Store

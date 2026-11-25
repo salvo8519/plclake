@@ -1,0 +1,119 @@
+{
+  "uid": "itp-platform-system-obs",
+  "title": "01. Platform Health, System Metrics & Functional Logs",
+  "description": "Sober IEP observability dashboard for API throughput, latency, ingestion/quarantine health, SMTP/Webhook alert delivery, and functional application audit logs.",
+  "tags": ["industrial-telemetry", "system", "logs", "prometheus"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "15s",
+  "editable": true,
+  "time": { "from": "now-6h", "to": "now" },
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "PostgreSQL Connection",
+      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "prom-telemetry" },
+      "targets": [{ "expr": "telemetry_db_connected", "refId": "A" }],
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            { "type": "value", "options": { "0": { "text": "FILE-FALLBACK", "color": "orange" }, "1": { "text": "CONNECTED", "color": "green" } } }
+          ],
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "orange", "value": null }, { "color": "green", "value": 1 }] }
+        }
+      }
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Process Uptime",
+      "gridPos": { "h": 4, "w": 6, "x": 6, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "prom-telemetry" },
+      "targets": [{ "expr": "telemetry_process_uptime_seconds", "refId": "A" }],
+      "fieldConfig": { "defaults": { "unit": "s", "color": { "mode": "fixed", "fixedColor": "blue" } } }
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Configured PLC Connections",
+      "gridPos": { "h": 4, "w": 6, "x": 12, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "prom-telemetry" },
+      "targets": [{ "expr": "telemetry_active_connections_total", "refId": "A" }],
+      "fieldConfig": { "defaults": { "unit": "short", "color": { "mode": "fixed", "fixedColor": "text" } } }
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "Process RSS Memory",
+      "gridPos": { "h": 4, "w": 6, "x": 18, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "prom-telemetry" },
+      "targets": [{ "expr": "telemetry_process_memory_rss_bytes", "refId": "A" }],
+      "fieldConfig": { "defaults": { "unit": "bytes", "color": { "mode": "fixed", "fixedColor": "text" } } }
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "HTTP Request Rate by Status Class",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 4 },
+      "datasource": { "type": "prometheus", "uid": "prom-telemetry" },
+      "targets": [
+        { "expr": "sum by (status_class) (rate(telemetry_http_requests_total[5m]))", "legendFormat": "{{status_class}}", "refId": "A" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "reqps", "custom": { "lineWidth": 2, "fillOpacity": 8 } } }
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "API Request Latency (p50 / p95)",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 4 },
+      "datasource": { "type": "prometheus", "uid": "prom-telemetry" },
+      "targets": [
+        { "expr": "histogram_quantile(0.50, sum by (le) (rate(telemetry_http_request_duration_ms_bucket[5m])))", "legendFormat": "p50 (ms)", "refId": "A" },
+        { "expr": "histogram_quantile(0.95, sum by (le) (rate(telemetry_http_request_duration_ms_bucket[5m])))", "legendFormat": "p95 (ms)", "refId": "B" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "ms", "custom": { "lineWidth": 2, "fillOpacity": 6 } } }
+    },
+    {
+      "id": 7,
+      "type": "timeseries",
+      "title": "Telemetry Ingestion vs Quarantine Rate",
+      "gridPos": { "h": 7, "w": 12, "x": 0, "y": 12 },
+      "datasource": { "type": "prometheus", "uid": "prom-telemetry" },
+      "targets": [
+        { "expr": "rate(telemetry_events_ingested_total[5m])", "legendFormat": "Accepted Events/s", "refId": "A" },
+        { "expr": "rate(telemetry_events_quarantined_total[5m])", "legendFormat": "Quarantined Events/s", "refId": "B" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "ops", "custom": { "lineWidth": 2, "fillOpacity": 8 } } }
+    },
+    {
+      "id": 8,
+      "type": "timeseries",
+      "title": "Alert Deliveries (SMTP / Webhook)",
+      "gridPos": { "h": 7, "w": 12, "x": 12, "y": 12 },
+      "datasource": { "type": "prometheus", "uid": "prom-telemetry" },
+      "targets": [
+        { "expr": "sum by (channel, status) (increase(telemetry_alerts_dispatched_total[15m]))", "legendFormat": "{{channel}} ({{status}})", "refId": "A" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "short", "custom": { "drawStyle": "bars", "fillOpacity": 60 } } }
+    },
+    {
+      "id": 9,
+      "type": "table",
+      "title": "Functional Application & Security Audit Log (PostgreSQL)",
+      "gridPos": { "h": 9, "w": 24, "x": 0, "y": 19 },
+      "datasource": { "type": "postgres", "uid": "pg-telemetry" },
+      "targets": [
+        {
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT timestamp, actor, actor_role, action, resource, status, request_id FROM audit_log ORDER BY timestamp DESC LIMIT 100;",
+          "refId": "A"
+        }
+      ],
+      "options": { "showHeader": true, "sortBy": [{ "displayName": "timestamp", "desc": true }] }
+    }
+  ]
+}

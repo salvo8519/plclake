@@ -1,0 +1,6 @@
+{
+  "name": "Machine Logs & ML Pipeline Studio",
+  "description": "Industrial machine telemetry simulator, Grafana Alloy/Loki observability stack, and ML-ready feature builder repository workspace with one-click ZIP export.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

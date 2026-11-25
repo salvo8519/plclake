@@ -1,0 +1,45 @@
+{
+  "site_name": "Stabilimento Principale IT-01",
+  "deployment_topology": "on-premise-lan",
+  "ingest_api_url": "http://10.10.20.15:3000/api/ingest/batch",
+  "spool_db_path": "/var/spool/edge-gateway/spool.db",
+  "spool_max_mb": 1024,
+  "connections": [
+    {
+      "id": "conn-plc-line01",
+      "name": "Siemens S7-1500 Line 01",
+      "machine_id": "M-01",
+      "line_id": "line-01",
+      "machine_type": "plc-controller",
+      "protocol": "opcua",
+      "host": "192.168.10.11",
+      "port": 4840,
+      "endpoint_or_topic": "opc.tcp://192.168.10.11:4840/UA/S71500",
+      "poll_interval_sec": 2,
+      "auth_mode": "x509-cert",
+      "tag_bindings": [
+        { "source_tag": "ns=3;s=\"DB_Telemetry\".\"TempC\"", "target_metric": "temp_c", "scale_factor": 1, "unit": "C" },
+        { "source_tag": "ns=3;s=\"DB_Telemetry\".\"CycleMs\"", "target_metric": "cycle_ms", "scale_factor": 1, "unit": "ms" },
+        { "source_tag": "ns=3;s=\"DB_Telemetry\".\"Vibration\"", "target_metric": "vibration_mm_s", "scale_factor": 0.01, "unit": "mm/s" }
+      ]
+    },
+    {
+      "id": "conn-gas-line02",
+      "name": "Endress+Hauser Methane Skid",
+      "machine_id": "M-03",
+      "line_id": "line-02",
+      "machine_type": "gas-flow-meter",
+      "protocol": "modbus-tcp",
+      "host": "192.168.10.24",
+      "port": 502,
+      "endpoint_or_topic": "unit=1;hr=40001..40006",
+      "poll_interval_sec": 5,
+      "auth_mode": "anonymous",
+      "tag_bindings": [
+        { "source_tag": "HR:40001", "target_metric": "flow_nm3_h", "scale_factor": 0.1, "unit": "Nm3/h" },
+        { "source_tag": "HR:40003", "target_metric": "pressure_bar", "scale_factor": 0.01, "unit": "bar" },
+        { "source_tag": "HR:40005", "target_metric": "temp_c", "scale_factor": 0.1, "unit": "C" }
+      ]
+    }
+  ]
+}

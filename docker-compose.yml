@@ -1,0 +1,112 @@
+# Industrial Telemetry & Edge Gateway Platform — One-Command Quickstart Stack
+# Starts: Telemetry App (3000) + PostgreSQL 16 (5432) + Mailpit (1025/8025) + Prometheus (9090) + Grafana (3001)
+# Usage: docker compose up -d
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: telemetry-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: machine_logs
+      POSTGRES_USER: mlops
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-mlops_local_dev}
+    ports:
+      - "5432:5432"
+    volumes:
+      - telemetry_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mlops -d machine_logs"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  mailpit:
+    image: axllent/mailpit:latest
+    container_name: telemetry-mailpit
+    restart: unless-stopped
+    ports:
+      - "1025:1025"   # SMTP relay endpoint
+      - "8025:8025"   # Mailpit Web UI & REST API
+    environment:
+      MP_SMTP_AUTH_ACCEPT_ANY: "1"
+      MP_SMTP_AUTH_ALLOW_INSECURE: "1"
+      MP_MAX_MESSAGES: "1000"
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        APP_BUILD_SHA: ${APP_BUILD_SHA:-}
+        APP_BUILD_TIME: ${APP_BUILD_TIME:-}
+    image: plclake:latest
+    container_name: plclake-platform
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      mailpit:
+        condition: service_started
+    ports:
+      - "3000:3000"
+    volumes:
+      - telemetry_state:/app/.state
+    environment:
+      NODE_ENV: production
+      PORT: "3000"
+      PLANT_SITE_ID: ${PLANT_SITE_ID:-plant-01}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      DATABASE_URL: postgres://mlops:${POSTGRES_PASSWORD:-mlops_local_dev}@postgres:5432/machine_logs
+      SMTP_HOST: mailpit
+      SMTP_PORT: "1025"
+      SMTP_FROM: alerts@telemetry.plant.local
+      MAILPIT_UI_URL: http://mailpit:8025
+      API_ENFORCE_AUTH: ${API_ENFORCE_AUTH:-false}
+      SCALAR_CDN_URL: ${SCALAR_CDN_URL:-}
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3000/readyz"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+
+  prometheus:
+    image: prom/prometheus:v2.54.1
+    container_name: telemetry-prometheus
+    restart: unless-stopped
+    depends_on:
+      - app
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - telemetry_promdata:/prometheus
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.retention.time=15d"
+
+  grafana:
+    image: grafana/grafana:11.2.0
+    container_name: telemetry-grafana
+    restart: unless-stopped
+    depends_on:
+      - prometheus
+      - postgres
+    ports:
+      - "3001:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_DEFAULT_THEME: light
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-mlops_local_dev}
+    volumes:
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - telemetry_grafanadata:/var/lib/grafana
+
+volumes:
+  telemetry_pgdata:
+  telemetry_state:
+  telemetry_promdata:
+  telemetry_grafanadata:

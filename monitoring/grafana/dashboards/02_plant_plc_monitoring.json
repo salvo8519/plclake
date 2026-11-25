@@ -1,0 +1,169 @@
+{
+  "uid": "itp-plant-plc-monitoring",
+  "title": "02. Plant & PLC Operations Monitoring",
+  "description": "Sober IEP industrial monitoring dashboard for OEE availability, machine temperature, primary telemetry KPIs, energy/gas totals, and anomalous PLC windows.",
+  "tags": ["industrial-telemetry", "plc", "oee", "plant"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "30s",
+  "editable": true,
+  "time": { "from": "now-24h", "to": "now" },
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Plant OEE Availability (%)",
+      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "prom-telemetry" },
+      "targets": [{ "expr": "telemetry_plant_oee_availability_pct", "refId": "A" }],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 0,
+          "max": 100,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "orange", "value": 80 },
+              { "color": "green", "value": 92 }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Anomalous / Fault Windows",
+      "gridPos": { "h": 4, "w": 6, "x": 6, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "prom-telemetry" },
+      "targets": [{ "expr": "telemetry_plant_fault_windows_total", "refId": "A" }],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "orange", "value": 1 },
+              { "color": "red", "value": 5 }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Estimated Energy Today (kWh)",
+      "gridPos": { "h": 4, "w": 6, "x": 12, "y": 0 },
+      "datasource": { "type": "postgres", "uid": "pg-telemetry" },
+      "targets": [
+        {
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT COALESCE(ROUND(SUM(estimated_energy_kwh)::numeric, 2), 0) AS kwh FROM vw_ba_controllo_gestione_daily WHERE dt::date >= CURRENT_DATE - INTERVAL '1 day';",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "kwatth", "color": { "mode": "fixed", "fixedColor": "blue" } } }
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "Estimated Gas Volume (Nm3)",
+      "gridPos": { "h": 4, "w": 6, "x": 18, "y": 0 },
+      "datasource": { "type": "postgres", "uid": "pg-telemetry" },
+      "targets": [
+        {
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT COALESCE(ROUND(SUM(estimated_gas_volume_nm3)::numeric, 2), 0) AS nm3 FROM vw_ba_controllo_gestione_daily WHERE dt::date >= CURRENT_DATE - INTERVAL '1 day';",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "short", "color": { "mode": "fixed", "fixedColor": "text" } } }
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "Peak Temperature by Machine (°C)",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 4 },
+      "datasource": { "type": "postgres", "uid": "pg-telemetry" },
+      "targets": [
+        {
+          "format": "time_series",
+          "rawQuery": true,
+          "rawSql": "SELECT window_start AS time, machine_id AS metric, temp_max AS value FROM ml_machine_features WHERE $__timeFilter(window_start) ORDER BY window_start ASC;",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "celsius", "custom": { "lineWidth": 2, "fillOpacity": 5 } } }
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "Primary Metric Mean by Machine",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 4 },
+      "datasource": { "type": "postgres", "uid": "pg-telemetry" },
+      "targets": [
+        {
+          "format": "time_series",
+          "rawQuery": true,
+          "rawSql": "SELECT window_start AS time, machine_id || ' (' || primary_metric_unit || ')' AS metric, primary_metric_mean AS value FROM ml_machine_features WHERE $__timeFilter(window_start) ORDER BY window_start ASC;",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": { "defaults": { "custom": { "lineWidth": 2, "fillOpacity": 5 } } }
+    },
+    {
+      "id": 7,
+      "type": "barchart",
+      "title": "Daily Availability OEE (%) per Machine",
+      "gridPos": { "h": 7, "w": 12, "x": 0, "y": 12 },
+      "datasource": { "type": "postgres", "uid": "pg-telemetry" },
+      "targets": [
+        {
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT machine_id, ROUND(AVG(availability_oee_pct)::numeric, 2) AS availability_oee_pct FROM vw_ba_controllo_gestione_daily GROUP BY machine_id ORDER BY availability_oee_pct ASC LIMIT 20;",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "percent", "min": 0, "max": 100 } }
+    },
+    {
+      "id": 8,
+      "type": "barchart",
+      "title": "Fault Events & Downtime (Hours) per Machine",
+      "gridPos": { "h": 7, "w": 12, "x": 12, "y": 12 },
+      "datasource": { "type": "postgres", "uid": "pg-telemetry" },
+      "targets": [
+        {
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT machine_id, SUM(total_fault_events) AS fault_events, ROUND(SUM(downtime_fault_hours)::numeric, 3) AS downtime_hours FROM vw_ba_controllo_gestione_daily GROUP BY machine_id ORDER BY fault_events DESC LIMIT 20;",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 9,
+      "type": "table",
+      "title": "Recent Anomalous & Fault PLC Feature Windows",
+      "gridPos": { "h": 9, "w": 24, "x": 0, "y": 19 },
+      "datasource": { "type": "postgres", "uid": "pg-telemetry" },
+      "targets": [
+        {
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT window_start, site_id, domain, line_id, machine_id, machine_type, temp_max, primary_metric_name, primary_metric_p95, fault_count, time_in_fault_sec, is_anomalous_window, will_fail_next_window FROM ml_machine_features WHERE is_anomalous_window = 1 OR fault_count > 0 ORDER BY window_start DESC LIMIT 100;",
+          "refId": "A"
+        }
+      ],
+      "options": { "showHeader": true }
+    }
+  ]
+}

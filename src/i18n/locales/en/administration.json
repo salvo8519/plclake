@@ -1,0 +1,307 @@
+{
+  "users": {
+    "title": "Plant Users",
+    "subtitle": "Manage operator accounts, revocable scrypt-authenticated sessions, and account lifecycle status.",
+    "addUser": "Create User",
+    "addFirstUser": "Add First User",
+    "searchPlaceholder": "Search by email, name, or role...",
+    "filterAllRoles": "All Roles",
+    "loading": "Loading operator accounts...",
+    "empty": "No user accounts configured yet.",
+    "youBadge": "(You)",
+    "never": "Never",
+    "active": "Active",
+    "disabled": "Disabled",
+    "table": {
+      "colEmail": "Email",
+      "colFullName": "Full Name",
+      "colRole": "Role",
+      "colLastLogin": "Last Login (UTC)",
+      "colStatus": "Status",
+      "colActions": "Actions",
+      "actionsAria": "Actions for {{email}}",
+      "editUser": "Edit User",
+      "disableAccount": "Disable Account",
+      "enableAccount": "Enable Account"
+    },
+    "drawer": {
+      "titleEdit": "Edit User — {{email}}",
+      "titleNew": "New Plant User Account",
+      "subtitleEdit": "Update assigned role, account status, or reset password.",
+      "subtitleNew": "Provision a new operator account with scrypt password hashing.",
+      "saveChanges": "Save Changes",
+      "createAccount": "Create Account",
+      "workEmail": "Work Email",
+      "fullName": "Full Name",
+      "assignedRole": "Assigned Role",
+      "roleAdminDesc": "admin — Full administrative access",
+      "roleOperatorDesc": "operator — Plant operations & alerts",
+      "roleViewerDesc": "viewer — Read-only BI & audit monitoring",
+      "resetPasswordLabel": "Reset Password (optional, min 8 chars)",
+      "initialPasswordLabel": "Initial Password (min 8 chars)",
+      "resetPasswordPlaceholder": "Leave blank to keep existing password",
+      "initialPasswordPlaceholder": "Minimum 8 characters",
+      "accountActive": "Account Active (unchecking immediately revokes active sessions)"
+    },
+    "messages": {
+      "errFullNameRequired": "Full name is required.",
+      "errResetPasswordMin": "Reset password must be at least 8 characters (or leave blank to keep current password).",
+      "errEmailRequired": "Work email is required.",
+      "errInitialPasswordMin": "Initial password must be at least 8 characters.",
+      "errUpdateStatus": "Failed to update user ({{status}})",
+      "errCreateStatus": "Failed to create user ({{status}})",
+      "errSaveGeneric": "Unable to save user account",
+      "updatedOk": "Updated user account {{email}}.",
+      "createdOk": "Created account {{email}} (password hashed with scrypt).",
+      "errStatusToggle": "Unable to update user status.",
+      "statusActiveOk": "{{email}} is now active.",
+      "statusDisabledOk": "{{email}} is now disabled (sessions revoked).",
+      "errSaveMatrixStatus": "Failed to save role permissions ({{status}})",
+      "errSaveMatrixGeneric": "Unable to save role permissions",
+      "matrixSavedOk": "Role permissions matrix saved. Navigation menus and access policies updated."
+    },
+    "pagination": {
+      "accounts": "accounts"
+    }
+  },
+  "roleMatrix": {
+    "title": "Role Access & Permissions",
+    "subtitle": "Compare and edit sidebar menu visibility and operational capabilities across all roles simultaneously.",
+    "readOnlyHint": "Read-only (Administrator required)",
+    "unsavedChanges": "Unsaved changes",
+    "discard": "Discard",
+    "resetDefaults": "Reset Defaults",
+    "savePermissions": "Save Role Permissions",
+    "saving": "Saving...",
+    "savedAt": "Saved {{timestamp}}",
+    "helperHint": "Use group header checkboxes to toggle an entire menu section. Each configurable role must keep at least 1 menu view enabled.",
+    "accountsAcrossRoles": "{{count}} {{accountWord}} across {{roles}} roles",
+    "accountSingular": "account",
+    "accountPlural": "accounts",
+    "columnHeader": "Menu View / Operational Permission",
+    "roleMeta": "{{users}} {{userWord}} · {{views}}/{{total}} views",
+    "userSingular": "user",
+    "userPlural": "users",
+    "groupMenuViews": "{{group}} Menu Views",
+    "capabilitiesHeader": "Operational Action Capabilities",
+    "minViewTitle": "At least one menu view must remain enabled for this role",
+    "ariaAdminGroup": "Admin access to all {{group}} views",
+    "ariaToggleGroup": "Toggle all {{group}} views for {{role}}",
+    "ariaAdminView": "Admin access to {{view}}",
+    "ariaRoleView": "{{role}} access to {{view}}",
+    "ariaAdminCaps": "Admin has all action capabilities",
+    "ariaToggleCaps": "Toggle all action capabilities for {{role}}",
+    "ariaAdminCap": "Admin capability {{cap}}",
+    "ariaRoleCap": "{{role}} capability {{cap}}",
+    "groups": {
+      "Operations": "Operations",
+      "Configuration": "Configuration",
+      "Administration": "Administration"
+    },
+    "views": {
+      "workbench": {
+        "label": "Live Simulation",
+        "summary": "Real-time stream workbench, telemetry tail & anomaly feed"
+      },
+      "fleet": {
+        "label": "Fleet Evaluation",
+        "summary": "KPI rollup, latency charts & quarantined packet review"
+      },
+      "connections": {
+        "label": "Plant Connections",
+        "summary": "OT endpoints, OPC-UA / Modbus / MQTT gateway targets"
+      },
+      "plc_catalog": {
+        "label": "PLC Catalog",
+        "summary": "Machine schemas, register mappings & custom PLC profiles"
+      },
+      "job_config": {
+        "label": "Job Configuration",
+        "summary": "Windowing thresholds, watermark policies & storage retention"
+      },
+      "notifications": {
+        "label": "Notifications & Alerts",
+        "summary": "Alert queue, SMTP / Webhook channels & Mailpit diagnostics"
+      },
+      "users": {
+        "label": "Users",
+        "summary": "Operator directory, credentials & account lifecycle management"
+      },
+      "roles": {
+        "label": "Roles & Permissions",
+        "summary": "RBAC role policies, sidebar view visibility & operational capabilities"
+      },
+      "tokens": {
+        "label": "API Tokens",
+        "summary": "Scoped X-API-Key lifecycle, AES-256-GCM encrypted hashes & Scalar test auth"
+      },
+      "audit": {
+        "label": "Audit Log",
+        "summary": "Immutable access, configuration & operational event trail"
+      }
+    },
+    "capabilities": {
+      "canControlSimulation": {
+        "label": "Control Live Simulation",
+        "description": "Start, pause, resume, and stop streaming runs"
+      },
+      "canWriteConfig": {
+        "label": "Modify Catalog, Connections & Job Policy",
+        "description": "Create/edit PLC schemas, OT connections, and pipeline parameters"
+      },
+      "canManageAlerts": {
+        "label": "Manage Alerts & Diagnostics",
+        "description": "Acknowledge alerts, edit SMTP/Webhook channels, run Mailpit diagnostics"
+      },
+      "canManageUsers": {
+        "label": "Manage Users & Role Matrix",
+        "description": "Create accounts, change roles, and configure RBAC menu visibility"
+      }
+    },
+    "roles": {
+      "admin": "Admin",
+      "operator": "Operator",
+      "viewer": "Viewer"
+    }
+  },
+  "audit": {
+    "title": "Immutable Security & Operations Audit Log",
+    "subtitle": "Trace every authentication event, RBAC mutation, PLC catalog change, key rotation, and alert triage decision.",
+    "refresh": "Refresh",
+    "exportCsv": "Export CSV",
+    "filters": {
+      "actorPlaceholder": "Filter actor (email or key)...",
+      "actorAria": "Filter by actor",
+      "actionPlaceholder": "Filter action (POST /users)...",
+      "actionAria": "Filter by action",
+      "outcomeAria": "Filter by outcome",
+      "outcomeAll": "All Outcomes",
+      "outcomeOk": "OK (2xx)",
+      "outcomeDenied": "Denied (401/403)",
+      "outcomeError": "Error (4xx/5xx)",
+      "limitAria": "Row limit",
+      "limitOption": "Latest {{count}} entries",
+      "showingEvents": "Showing {{count}} event(s)"
+    },
+    "table": {
+      "colTimestamp": "Timestamp (UTC)",
+      "colActor": "Actor & Role",
+      "colAction": "Action",
+      "colResource": "Resource",
+      "colOutcome": "Outcome",
+      "colRequestId": "Request ID",
+      "loading": "Loading audit trail...",
+      "empty": "No audit log entries match the active filters."
+    },
+    "pagination": {
+      "events": "audit events"
+    }
+  },
+  "tokens": {
+    "title": "API Key & Token Management",
+    "subtitle": "Issue, rotate, and revoke scoped X-API-Key credentials for ERP, BI, SCADA, and Edge integrations. Plaintext keys are shown once and stored encrypted at rest (AES-256-GCM over SHA-256).",
+    "mintSandbox": "Mint 1h Test Key",
+    "mintingSandbox": "Minting...",
+    "issueKey": "Issue API Key",
+    "openScalar": "Open Scalar API",
+    "readOnlyHint": "Read-only (Admin required to issue or revoke keys)",
+    "kpi": {
+      "activeKeys": "Active Keys",
+      "activeSub": "Encrypted at rest (AES-256-GCM)",
+      "totalCalls": "Authenticated API Calls",
+      "totalCallsSub": "Attributed in Audit & JSON Logs",
+      "expiringSoon": "Expiring Within 7 Days",
+      "expiringSoonSub": "Rotate before TTL expiry",
+      "revokedExpired": "Revoked / Expired",
+      "revokedExpiredSub": "Retained for audit traceability"
+    },
+    "reveal": {
+      "title": "New API Key Issued — Copy Now (Shown Once)",
+      "warning": "For security, the plaintext key is never stored on the server and cannot be viewed again after dismissing this banner.",
+      "copyKey": "Copy X-API-Key",
+      "copiedKey": "Key Copied",
+      "copyCurl": "Copy cURL Test",
+      "copiedCurl": "cURL Copied",
+      "testInScalar": "Test in Scalar",
+      "dismiss": "Dismiss"
+    },
+    "filters": {
+      "searchPlaceholder": "Search key name, prefix, or owner...",
+      "searchAria": "Search API keys",
+      "all": "All",
+      "active": "Active",
+      "inactive": "Revoked & Expired"
+    },
+    "table": {
+      "colName": "Key Name & Prefix",
+      "colOwner": "Owner Account",
+      "colScopes": "Scopes",
+      "colStatus": "Status",
+      "colUsage": "Usage & Last Seen",
+      "colExpiry": "Expires (UTC)",
+      "colActions": "Actions",
+      "sandboxTag": "SANDBOX",
+      "neverUsed": "Never used",
+      "noExpiry": "No expiry",
+      "callsCount": "{{count}} calls",
+      "actionsAria": "Actions for {{name}}",
+      "rotateKey": "Rotate Key",
+      "revokeKey": "Revoke Key",
+      "copyPrefix": "Copy Prefix",
+      "inspectAudit": "Inspect Audit Trail",
+      "loading": "Loading managed API keys...",
+      "empty": "No API keys match the active filter.",
+      "emptyInitial": "No managed API keys issued yet. Create one to integrate external systems via X-API-Key."
+    },
+    "status": {
+      "active": "Active",
+      "expired": "Expired",
+      "revoked": "Revoked"
+    },
+    "scopes": {
+      "read": "read",
+      "edge": "edge",
+      "admin": "admin",
+      "readDesc": "Query KPIs, PLC catalog, live snapshots, and audit feeds (BI / Grafana / ERP)",
+      "edgeDesc": "Push telemetry batches and sync OT collector configs (Edge Gateways / PLC Bridges)",
+      "adminDesc": "Full administrative writes: catalog, connections, alerts, users, and key management"
+    },
+    "drawer": {
+      "title": "Issue New API Key",
+      "subtitle": "Generate a revocable X-API-Key bound to least-privilege scopes and an owner account.",
+      "keyName": "Key Name",
+      "keyNamePlaceholder": "e.g., Power BI Plant Analytics, MES Sync Worker",
+      "description": "Integration Purpose (optional)",
+      "descriptionPlaceholder": "Describe the external system or pipeline consuming this key",
+      "owner": "Owner Account (Audit Attribution)",
+      "scopesLabel": "Authorized Scopes (Least Privilege)",
+      "ttlLabel": "Expiration Policy (TTL)",
+      "ttl1h": "1 hour (Sandbox / Testing)",
+      "ttl24h": "24 hours (Short-lived integration)",
+      "ttl7d": "7 days",
+      "ttl30d": "30 days",
+      "ttl90d": "90 days (Recommended production)",
+      "ttl365d": "365 days",
+      "ttlNever": "No expiration (Manual rotation only)",
+      "submit": "Generate API Key",
+      "submitting": "Generating..."
+    },
+    "messages": {
+      "errNameRequired": "Key name must be at least 2 characters.",
+      "errScopeRequired": "Select at least one authorization scope.",
+      "errLoad": "Failed to load API keys ({{status}})",
+      "errIssue": "Failed to issue API key ({{status}})",
+      "errSandbox": "Failed to mint sandbox key ({{status}})",
+      "errRotate": "Failed to rotate API key ({{status}})",
+      "errRevoke": "Failed to revoke API key ({{status}})",
+      "issuedOk": "Issued API key \"{{name}}\". Copy it from the secure banner below.",
+      "sandboxOk": "Minted 1-hour sandbox test key \"{{name}}\". Click \"Test in Scalar\" to try endpoints right away.",
+      "rotatedOk": "Rotated \"{{name}}\": previous key revoked immediately and replacement issued.",
+      "revokedOk": "Revoked API key \"{{name}}\". All subsequent requests using this key will receive 401.",
+      "prefixCopied": "Copied key prefix {{prefix}} to clipboard."
+    },
+    "pagination": {
+      "keys": "API keys"
+    }
+  }
+}

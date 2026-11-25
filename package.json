@@ -1,0 +1,85 @@
+{
+  "name": "plclake",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "tsx server.ts",
+    "start": "node server.ts",
+    "build": "vite build",
+    "build:server": "esbuild server.ts --bundle --platform=node --format=esm --packages=external --outfile=dist-server/server.mjs",
+    "preview": "vite preview",
+    "clean": "rm -rf dist dist-server server.js site",
+    "lint": "tsc --noEmit",
+    "lint:code": "biome lint src server.ts scripts tests",
+    "lint:eslint": "eslint src server.ts scripts tests",
+    "lint:eslint:fix": "eslint --fix src server.ts scripts tests",
+    "lint:fix": "biome check --write src server.ts scripts tests && eslint --fix src server.ts scripts tests",
+    "format": "biome format --write src server.ts scripts tests",
+    "audit:deps": "npm audit --omit=dev --audit-level=high",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "docs:openapi": "tsx scripts/export-openapi.ts",
+    "check:i18n": "tsx scripts/check-i18n-docs.ts",
+    "sync:badges": "tsx scripts/sync-readme-badges.ts",
+    "verify": "npm run lint && npm run lint:eslint && npm run lint:code && npm run check:i18n && npm test && npm run build && npm run build:server",
+    "prepare": "husky || true",
+    "hooks:install": "husky || true"
+  },
+  "lint-staged": {
+    "*.{ts,tsx,js,jsx,mjs}": [
+      "eslint --fix",
+      "biome check --write --no-errors-on-unmatched"
+    ],
+    "*.{json,css}": [
+      "biome check --write --no-errors-on-unmatched"
+    ],
+    "project_repo/**/*.py": [
+      "sh -c 'if command -v ruff >/dev/null 2>&1; then ruff check --fix \"$@\" && ruff format \"$@\"; else echo \"[lint-staged] ruff not installed locally; enforced in CI\"; fi' --"
+    ]
+  },
+  "dependencies": {
+    "@asteasolutions/zod-to-openapi": "^9.1.0",
+    "@scalar/express-api-reference": "^0.10.40",
+    "@tailwindcss/vite": "^4.3.3",
+    "@types/nodemailer": "^8.0.2",
+    "@types/pg": "^8.23.1",
+    "@types/supertest": "^7.2.1",
+    "@vitejs/plugin-react": "^6.1.1",
+    "express": "^4.21.2",
+    "i18next": "^27.2.6",
+    "lucide-react": "^0.546.0",
+    "nodemailer": "^10.6.1",
+    "pg": "^8.23.1",
+    "react": "^19.0.1",
+    "react-dom": "^19.0.1",
+    "react-i18next": "^18.0.3",
+    "supertest": "^7.3.2",
+    "vite": "^8.3.0",
+    "vitest": "^5.1.1",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.6.8",
+    "@eslint/eslintrc": "^3.3.7",
+    "@eslint/js": "^10.0.1",
+    "@types/express": "^4.17.21",
+    "@types/node": "^22.14.0",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "esbuild": "^0.25.0",
+    "eslint": "^10.15.0",
+    "eslint-config-airbnb-base": "^15.0.0",
+    "eslint-plugin-import": "^2.32.0",
+    "eslint-plugin-jsx-a11y": "^6.10.2",
+    "eslint-plugin-react": "^7.37.5",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "globals": "^17.14.0",
+    "husky": "^9.1.7",
+    "lint-staged": "^17.6.2",
+    "tailwindcss": "^4.3.3",
+    "tsx": "^4.21.0",
+    "typescript": "6.0.3",
+    "typescript-eslint": "^8.74.0"
+  }
+}

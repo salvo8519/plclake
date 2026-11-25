@@ -1,0 +1,125 @@
+/* Industrial Midnight Steel & Brushed Brass Editorial Theme for Zensical Documentation */
+:root,
+[data-md-color-scheme="default"] {
+  --md-primary-fg-color: #0b1622;
+  --md-primary-fg-color--light: #16324f;
+  --md-primary-fg-color--dark: #071019;
+  --md-accent-fg-color: #c9a45c;
+  --md-default-bg-color: #ffffff;
+  --md-default-fg-color: #0d1620;
+  --md-typeset-a-color: #16324f;
+  --erp-hairline: #e4e8ee;
+  --erp-hairline-strong: #ced6e0;
+  --erp-brass: #c9a45c;
+  --erp-brass-ink: #8f6e2e;
+}
+
+[data-md-color-scheme="slate"] {
+  --md-primary-fg-color: #0b1622;
+  --md-primary-fg-color--light: #16324f;
+  --md-primary-fg-color--dark: #071019;
+  --md-accent-fg-color: #c9a45c;
+  --md-typeset-a-color: #c9a45c;
+  --erp-hairline: #1d2f42;
+  --erp-hairline-strong: #2c435b;
+  --erp-brass: #c9a45c;
+  --erp-brass-ink: #d9b872;
+}
+
+.md-header {
+  background-color: #0b1622;
+  border-bottom: 2px solid var(--erp-brass);
+  box-shadow: none;
+}
+
+.md-tabs {
+  background-color: #122437;
+  border-bottom: 1px solid #1d354d;
+}
+
+/* Crisp squared editorial geometry */
+.md-typeset .admonition,
+.md-typeset details,
+.md-typeset pre > code,
+.md-typeset .md-button,
+.md-search__form {
+  border-radius: 2px;
+}
+
+/* Borderless editorial hairline tables matching the Web Console */
+.md-typeset table:not([class]) {
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+  font-size: 0.78rem;
+}
+
+.md-typeset table:not([class]) th {
+  background-color: #f8f9fa;
+  color: #475569;
+  font-weight: 600;
+  text-transform: uppercase;
+  font-size: 0.69rem;
+  letter-spacing: 0.05em;
+  border: none;
+  border-top: 1px solid var(--erp-hairline);
+  border-bottom: 1px solid var(--erp-hairline-strong);
+}
+
+.md-typeset table:not([class]) td {
+  border: none;
+  border-bottom: 1px solid var(--erp-hairline);
+}
+
+[data-md-color-scheme="slate"] .md-typeset table:not([class]) th {
+  background-color: #122437;
+  color: #cbd5e1;
+}
+
+.md-typeset h1,
+.md-typeset h2,
+.md-typeset h3 {
+  letter-spacing: -0.02em;
+  font-weight: 650;
+}
+
+.md-typeset .admonition,
+.md-typeset details {
+  border: 1px solid var(--erp-hairline);
+  box-shadow: none;
+}
+
+.erp-docs-lang-bar {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  border: 1px solid var(--erp-hairline-strong);
+  background: #f8f9fa;
+  border-radius: 2px;
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 12px;
+  margin-bottom: 1rem;
+}
+
+[data-md-color-scheme="slate"] .erp-docs-lang-bar {
+  background: #122437;
+}
+
+.erp-docs-lang-bar a {
+  text-decoration: none;
+  font-weight: 600;
+  color: var(--md-typeset-a-color);
+}
+
+.erp-docs-lang-bar strong {
+  color: var(--erp-brass-ink);
+}
+
+.erp-scalar-frame {
+  border: 1px solid var(--erp-hairline);
+  border-radius: 2px;
+  overflow: hidden;
+  height: 780px;
+  background: #ffffff;
+}

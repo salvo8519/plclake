@@ -1,0 +1,47 @@
+local.file_match "machine_json_logs" {
+  path_targets = [
+    {
+      __path__ = "/var/log/machines/telemetry*.jsonl",
+      env      = "local",
+      service  = "machine-simulator",
+    },
+    {
+      __path__ = "/var/log/machines/segments/telemetry.*.jsonl",
+      env      = "local",
+      service  = "machine-simulator",
+    },
+  ]
+  sync_period = "5s"
+}
+
+loki.source.file "machine_logs" {
+  targets       = local.file_match.machine_json_logs.targets
+  forward_to    = [loki.process.parse_machine_logs.receiver]
+  tail_from_end = false
+}
+
+loki.process "parse_machine_logs" {
+  forward_to = [loki.write.default.receiver]
+
+  stage.json {
+    expressions = {
+      level        = "level",
+      line_id      = "line_id",
+      machine_type = "machine_type",
+    }
+  }
+
+  stage.labels {
+    values = {
+      level        = "",
+      line_id      = "",
+      machine_type = "",
+    }
+  }
+}
+
+loki.write "default" {
+  endpoint {
+    url = "http://loki:3100/loki/api/v1/push"
+  }
+}
