@@ -1,4 +1,4 @@
-# PLCLake — Industrial Telemetry & ML Lakehouse
+# PLCLake — ndustrial Telemetry connector
 
 <p align="center">
   <a href="README.md">English</a> · <strong>Italiano</strong>
