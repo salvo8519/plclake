@@ -254,6 +254,7 @@ export class AuthAuditManager {
   };
   private rolePermissionsUpdatedAt = new Date().toISOString();
   private sessions = new Map<string, ActiveSession>();
+  private readonly inFlight = new Set<Promise<unknown>>();
   private readonly secretEventBus = new SecretManagementEventBus();
 
   constructor(rootDir: string, dbStore?: DatabaseStore) {
@@ -658,7 +659,31 @@ export class AuthAuditManager {
     };
   }
 
-  async recordAudit(entry: Omit<AuditLogEntry, 'id' | 'timestamp'>): Promise<AuditLogEntry> {
+  /**
+   * Registers a background persistence operation so `flush()` can await it.
+   * Callers that cannot await (response `finish` hooks, hot auth paths) must go
+   * through here instead of a bare `void` to avoid losing writes on shutdown.
+   */
+  private track<T>(operation: Promise<T>): Promise<T> {
+    this.inFlight.add(operation);
+    operation
+      .finally(() => this.inFlight.delete(operation))
+      .catch(() => undefined);
+    return operation;
+  }
+
+  /** Resolves once every tracked audit / token persistence operation has settled. */
+  async flush(): Promise<void> {
+    while (this.inFlight.size > 0) {
+      await Promise.allSettled([...this.inFlight]);
+    }
+  }
+
+  recordAudit(entry: Omit<AuditLogEntry, 'id' | 'timestamp'>): Promise<AuditLogEntry> {
+    return this.track(this.writeAuditEntry(entry));
+  }
+
+  private async writeAuditEntry(entry: Omit<AuditLogEntry, 'id' | 'timestamp'>): Promise<AuditLogEntry> {
     const fullEntry: AuditLogEntry = {
       id: `aud-${crypto.randomUUID().slice(0, 12)}`,
       timestamp: new Date().toISOString(),
@@ -1032,7 +1057,7 @@ export class AuthAuditManager {
     const nowMs = Date.now();
     if (matched.usageCount === 1 || nowMs - this.lastTokenUsagePersistMs > 5_000) {
       this.lastTokenUsagePersistMs = nowMs;
-      void this.persistApiTokens();
+      void this.track(this.persistApiTokens());
     }
 
     return {

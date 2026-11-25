@@ -50,6 +50,21 @@ export async function atomicWriteJson(
   }
 }
 
+/**
+ * Waits until every queued atomic JSON write has settled.
+ *
+ * Fire-and-forget persistence (audit log on response `finish`, token usage
+ * counters, live-run snapshots) can still be writing into `.state/` after the
+ * HTTP response has been delivered. Call this before graceful shutdown or before
+ * removing a state directory, otherwise late writes are lost or race the cleanup.
+ * Loops because a settling write may enqueue a follow-up write on the same path.
+ */
+export async function flushPendingWrites(): Promise<void> {
+  while (writeQueues.size > 0) {
+    await Promise.allSettled([...writeQueues.values()]);
+  }
+}
+
 const FORMULA_PREFIX_REGEX = /^[=+\-@\t\r]/;
 
 /**

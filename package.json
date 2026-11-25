@@ -28,8 +28,8 @@
   },
   "lint-staged": {
     "*.{ts,tsx,js,jsx,mjs}": [
-      "eslint --fix",
-      "biome check --write --no-errors-on-unmatched"
+      "biome lint --write --no-errors-on-unmatched",
+      "eslint --fix"
     ],
     "*.{json,css}": [
       "biome check --write --no-errors-on-unmatched"

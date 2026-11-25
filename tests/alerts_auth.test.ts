@@ -156,6 +156,7 @@ function startMockWebhookServer(): Promise<{
 describe('Notifications (SMTP/Mailpit + Signed Webhook), RBAC & Audit Log Suite', () => {
   let tmpDir: string;
   let app: Awaited<ReturnType<typeof createApp>>['app'];
+  let drainPendingWrites: () => Promise<void>;
   let alertEngine: AlertEngine;
   let smtpServer: Awaited<ReturnType<typeof startMockMailpitSmtpServer>>;
   let webhookServer: Awaited<ReturnType<typeof startMockWebhookServer>>;
@@ -169,6 +170,7 @@ describe('Notifications (SMTP/Mailpit + Signed Webhook), RBAC & Audit Log Suite'
 
     const created = await createApp({ rootDir: tmpDir, mountFrontend: false });
     app = created.app;
+    drainPendingWrites = created.drainPendingWrites;
     alertEngine = created.alertEngine;
 
     // Enable auth enforcement via rotating a key so RBAC boundaries are strictly exercised
@@ -183,6 +185,8 @@ describe('Notifications (SMTP/Mailpit + Signed Webhook), RBAC & Audit Log Suite'
     }
     await smtpServer.close();
     await webhookServer.close();
+    // Background audit/state writes must settle before the state dir is removed.
+    await drainPendingWrites();
     await fs.rm(tmpDir, { recursive: true, force: true });
   });
 

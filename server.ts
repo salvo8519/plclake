@@ -63,7 +63,7 @@ import {
   sanitizeJobConfig,
 } from './src/serverConfig.ts';
 import { SimulationRunManager } from './src/simulationRunner.ts';
-import { atomicWriteJson, sanitizeCsvCell } from './src/utils/persistence.ts';
+import { atomicWriteJson, flushPendingWrites, sanitizeCsvCell } from './src/utils/persistence.ts';
 import type {
   JobConfig,
   LiveRunSnapshot,
@@ -2111,6 +2111,18 @@ export async function createApp(options: CreateAppOptions = {}) {
     }
   }
 
+  /**
+   * Drains background persistence (audit log, token usage, atomic `.state/` writes).
+   * Must run after the HTTP server stops accepting requests and before the DB pool
+   * closes or the state directory is removed.
+   */
+  const drainPendingWrites = async (): Promise<void> => {
+    // Let pending response `finish` hooks enqueue their audit writes first.
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    await authAuditManager.flush();
+    await flushPendingWrites();
+  };
+
   return {
     app,
     dbStore,
@@ -2120,6 +2132,7 @@ export async function createApp(options: CreateAppOptions = {}) {
     connectionManager,
     plcCatalogManager,
     markShuttingDown,
+    drainPendingWrites,
   };
 }
 
@@ -2129,7 +2142,7 @@ const isMainEntry =
   pathToFileURL(path.resolve(process.argv[1])).href === import.meta.url;
 
 if (isMainEntry) {
-  createApp().then(({ app, dbStore, runManager, markShuttingDown }) => {
+  createApp().then(({ app, dbStore, runManager, markShuttingDown, drainPendingWrites }) => {
     const httpServer = app.listen(PORT, '0.0.0.0', () => {
       const storageMode = dbStore.isPostgresActive() ? 'postgres' : 'file-fallback';
       logger.info('system', 'Industrial Telemetry server listening', {
@@ -2158,6 +2171,7 @@ if (isMainEntry) {
         await new Promise<void>((resolve) => {
           httpServer.close(() => resolve());
         });
+        await drainPendingWrites();
         await dbStore.close();
         logger.info('system', 'Graceful shutdown completed cleanly', { signal });
         process.exit(0);
