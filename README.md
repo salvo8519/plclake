@@ -1,5 +1,4 @@
-# PLCLake
-# Industrial Telemetry & ML Lakehouse
+# PLCLake - Industrial Telemetry & ML Lakehouse
 
 <p align="center">
   <strong>English</strong> · <a href="README.it.md">Italiano</a>
