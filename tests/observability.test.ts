@@ -10,16 +10,20 @@ import { StructuredLogger, redactSensitiveData } from '../src/logger.ts';
 describe('Fascia C Observability, Structured Logging, Probes & Grafana Dashboards', () => {
   let tmpDir: string;
   let app: Awaited<ReturnType<typeof createApp>>['app'];
+  let drainPendingWrites: () => Promise<void>;
   let markShuttingDown: () => void;
 
   beforeAll(async () => {
     tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'telemetry-obs-test-'));
     const created = await createApp({ rootDir: tmpDir, mountFrontend: false });
     app = created.app;
+    drainPendingWrites = created.drainPendingWrites;
     markShuttingDown = created.markShuttingDown;
   });
 
   afterAll(async () => {
+    // Background audit/state writes must settle before the state dir is removed.
+    await drainPendingWrites();
     await fs.rm(tmpDir, { recursive: true, force: true });
   });
 

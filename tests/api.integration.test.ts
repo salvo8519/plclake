@@ -8,6 +8,7 @@ import { createApp } from '../server.ts';
 describe('Industrial Telemetry API Integration & Security Suite', () => {
   let tmpDir: string;
   let app: Awaited<ReturnType<typeof createApp>>['app'];
+  let drainPendingWrites: () => Promise<void>;
   let readToken: string;
   let edgeToken: string;
   let adminToken: string;
@@ -16,6 +17,7 @@ describe('Industrial Telemetry API Integration & Security Suite', () => {
     tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'telemetry-api-test-'));
     const created = await createApp({ rootDir: tmpDir, mountFrontend: false });
     app = created.app;
+    drainPendingWrites = created.drainPendingWrites;
 
     const r1 = await request(app)
       .post('/api/v1/connections/api-keys/rotate')
@@ -33,6 +35,8 @@ describe('Industrial Telemetry API Integration & Security Suite', () => {
   });
 
   afterAll(async () => {
+    // Background audit/state writes must settle before the state dir is removed.
+    await drainPendingWrites();
     await fs.rm(tmpDir, { recursive: true, force: true });
   });
 

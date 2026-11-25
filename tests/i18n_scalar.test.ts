@@ -21,14 +21,18 @@ function collectKeys(obj: unknown, prefix = '', out: string[] = []): string[] {
 describe('Bilingual i18n (EN/IT) & Editorial Scalar OpenAPI 3.1', () => {
   let tmpDir: string;
   let app: Awaited<ReturnType<typeof createApp>>['app'];
+  let drainPendingWrites: () => Promise<void>;
 
   beforeAll(async () => {
     tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'telemetry-i18n-test-'));
     const created = await createApp({ rootDir: tmpDir, mountFrontend: false });
     app = created.app;
+    drainPendingWrites = created.drainPendingWrites;
   });
 
   afterAll(async () => {
+    // Background audit/state writes must settle before the state dir is removed.
+    await drainPendingWrites();
     await fs.rm(tmpDir, { recursive: true, force: true });
   });
 

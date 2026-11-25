@@ -11,12 +11,14 @@ import type { TokenLifecycleEvent } from '../src/secretManagementEvents.ts';
 describe('Managed X-API-Key Lifecycle, Encrypted Storage, Sandbox Auth & Audit Trail', () => {
   let tmpDir: string;
   let app: Awaited<ReturnType<typeof createApp>>['app'];
+  let drainPendingWrites: () => Promise<void>;
   let adminSessionToken: string;
 
   beforeAll(async () => {
     tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'telemetry-api-tokens-'));
     const created = await createApp({ rootDir: tmpDir, mountFrontend: false });
     app = created.app;
+    drainPendingWrites = created.drainPendingWrites;
 
     // Enable strict auth enforcement so every key, scope, and revocation boundary is verified
     await request(app).post('/api/v1/connections/api-keys/rotate').send({ scope: 'admin' });
@@ -32,6 +34,8 @@ describe('Managed X-API-Key Lifecycle, Encrypted Storage, Sandbox Auth & Audit T
   });
 
   afterAll(async () => {
+    // Background audit/state writes must settle before the state dir is removed.
+    await drainPendingWrites();
     await fs.rm(tmpDir, { recursive: true, force: true });
   });
 
