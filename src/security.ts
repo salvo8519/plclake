@@ -1,4 +1,5 @@
 import crypto from 'node:crypto';
+import dns from 'node:dns/promises';
 import fs from 'node:fs/promises';
 import net from 'node:net';
 import path from 'node:path';
@@ -354,6 +355,51 @@ export function validateProbeHost(
   }
 
   return { allowed: true };
+}
+
+export type HostResolver = (host: string) => Promise<string[]>;
+
+const systemResolver: HostResolver = async (host) =>
+  (await dns.lookup(host, { all: true, verbatim: true })).map((r) => r.address);
+
+/**
+ * Outbound host validation including DNS: `validateProbeHost` only inspects the host string,
+ * so a hostname that resolves to loopback or cloud metadata (e.g. `127.0.0.1.nip.io`) would
+ * pass. This resolves the name and applies the same policy to every returned address.
+ *
+ * Residual risk: DNS rebinding between this check and the actual connection. Raw TCP probes
+ * should connect to one of the returned `addresses` to close that gap.
+ */
+export async function validateOutboundHost(
+  rawHost: string,
+  options?: { allowLoopback?: boolean; resolver?: HostResolver }
+): Promise<{ allowed: boolean; reason?: string; addresses: string[] }> {
+  const staticCheck = validateProbeHost(rawHost, options);
+  if (!staticCheck.allowed) return { ...staticCheck, addresses: [] };
+
+  const host = rawHost.trim().toLowerCase().replace(/^\[|\]$/g, '');
+  if (net.isIP(host)) return { allowed: true, addresses: [host] };
+
+  let addresses: string[];
+  try {
+    addresses = await (options?.resolver ?? systemResolver)(host);
+  } catch {
+    return { allowed: false, reason: `Host '${host}' could not be resolved.`, addresses: [] };
+  }
+  if (addresses.length === 0) {
+    return { allowed: false, reason: `Host '${host}' did not resolve to any address.`, addresses: [] };
+  }
+  for (const address of addresses) {
+    const check = validateProbeHost(address, options);
+    if (!check.allowed) {
+      return {
+        allowed: false,
+        reason: `Host '${host}' resolves to blocked address ${address}: ${check.reason}`,
+        addresses: [],
+      };
+    }
+  }
+  return { allowed: true, addresses };
 }
 
 /**

@@ -7,9 +7,10 @@ import {
   sha256Hex,
   timingSafeHashMatch,
   timingSafeStringEqual,
-  validateProbeHost,
+  validateOutboundHost,
   type ApiAuthScope,
 } from './security.ts';
+import { isApiAuthEnforced } from './config/runtimeEnv.ts';
 import { atomicWriteJson } from './utils/persistence.ts';
 import type { DatabaseStore } from './db.ts';
 import type {
@@ -442,8 +443,9 @@ export class ConnectionManager {
     };
   }
 
+  /** Always true in production; see `isApiAuthEnforced` for the non-production rules. */
   isAuthEnforced(): boolean {
-    return this.state.settings.requireGatewayToken || process.env.API_ENFORCE_AUTH === 'true';
+    return isApiAuthEnforced(this.state.settings.requireGatewayToken);
   }
 
   resolveCredentialScope(candidate: string): ApiAuthScope | null {
@@ -590,7 +592,7 @@ export class ConnectionManager {
     let errorCode: string | null = null;
     let errorMessage: string | null = null;
 
-    const hostCheck = validateProbeHost(conn.host);
+    const hostCheck = await validateOutboundHost(conn.host);
     if (!hostCheck.allowed) {
       conn.lastProbeAt = checkedAt;
       conn.lastLatencyMs = null;
@@ -635,7 +637,8 @@ export class ConnectionManager {
     } else {
       const tcpResult = await new Promise<{ ok: boolean; code: string | null; message: string | null }>(
         (resolve) => {
-          const socket = net.createConnection({ host: conn.host, port: conn.port });
+          // Connect to the address that passed the SSRF policy (no second DNS lookup).
+          const socket = net.createConnection({ host: hostCheck.addresses[0], port: conn.port });
           let settled = false;
           const finish = (ok: boolean, code: string | null, message: string | null) => {
             if (settled) return;

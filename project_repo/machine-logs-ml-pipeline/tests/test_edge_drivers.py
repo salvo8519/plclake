@@ -44,7 +44,10 @@ def test_live_modbus_tcp_and_http_rest_against_virtual_plc_bench() -> None:
     )
     bench.start()
     prev_token = os.environ.get("EDGE_HTTP_METER_TOKEN")
+    prev_plaintext = os.environ.get("EDGE_HTTP_METER_ALLOW_PLAINTEXT_TOKEN")
     os.environ["EDGE_HTTP_METER_TOKEN"] = "meter_secret_123"
+    # The virtual bench serves plain HTTP on loopback: opt in explicitly, as an operator would.
+    os.environ["EDGE_HTTP_METER_ALLOW_PLAINTEXT_TOKEN"] = "true"
     try:
         # 1. Real wire-level Modbus TCP polling (uint16 + IEEE-754 float32 + signed int16 + coil)
         modbus_conn = ConnectionSpec(
@@ -145,6 +148,10 @@ def test_live_modbus_tcp_and_http_rest_against_virtual_plc_bench() -> None:
             os.environ.pop("EDGE_HTTP_METER_TOKEN", None)
         else:
             os.environ["EDGE_HTTP_METER_TOKEN"] = prev_token
+        if prev_plaintext is None:
+            os.environ.pop("EDGE_HTTP_METER_ALLOW_PLAINTEXT_TOKEN", None)
+        else:
+            os.environ["EDGE_HTTP_METER_ALLOW_PLAINTEXT_TOKEN"] = prev_plaintext
         bench.stop()
 
 

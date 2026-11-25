@@ -10,16 +10,20 @@ concurrency:
   group: "ci-${{ github.ref }}"
   cancel-in-progress: true
 
+# Least privilege: CI only reads the repository.
+permissions:
+  contents: read
+
 jobs:
   node-platform-ci:
     name: Node.js API, Biome, Security & Build
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Setup Node.js 22
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: "22"
 
@@ -52,10 +56,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Setup Python 3.11
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: "3.11"
 
@@ -70,4 +74,7 @@ jobs:
       - name: Run Edge Collector & Modbus TCP / HTTP Virtual PLC tests
         env:
           PYTHONPATH: project_repo/machine-logs-ml-pipeline/src
-        run: pytest -v project_repo/machine-logs-ml-pipeline/tests/test_edge_drivers.py
+        run: |
+          pytest -v \
+            project_repo/machine-logs-ml-pipeline/tests/test_edge_drivers.py \
+            project_repo/machine-logs-ml-pipeline/tests/test_edge_gateway.py

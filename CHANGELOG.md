@@ -2,6 +2,30 @@
 
 All notable changes to this project are documented in this file following [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and Semantic Versioning.
 
+## [Unreleased]
+
+Hardening release (issue #2). No new features.
+
+### Security
+- Production always enforces API authentication (`NODE_ENV=production`): `API_ENFORCE_AUTH=false` and the console "trusted-lan" toggle can no longer open admin routes to anonymous callers.
+- No default passwords in the code base: built-in accounts read `AUTH_ADMIN_PASSWORD`, `AUTH_DEMO_OPERATOR_PASSWORD`, `AUTH_DEMO_VIEWER_PASSWORD`; outside production, missing ones are generated and written once to `.state/initial-credentials.txt` (0600). Demo operator/viewer accounts are seeded only with `AUTH_SEED_DEMO_USERS=true` and never in production. The login screen no longer ships prefilled credentials.
+- Outbound SSRF policy now validates every DNS-resolved address (webhook, Mailpit, SMTP, PLC probes); TCP probes connect to the validated IP.
+- Login hashing is asynchronous and constant-cost for unknown accounts (no event-loop blocking, no user enumeration by timing). Password changes revoke existing sessions; short passwords are rejected instead of silently ignored.
+- Edge gateway never sends the HTTP meter bearer token over plain HTTP unless `EDGE_HTTP_METER_ALLOW_PLAINTEXT_TOKEN=true`.
+- CI runs with `contents: read` permissions; actions upgraded to the Node 24 runtime.
+
+### Fixed
+- Unhandled errors in async API handlers no longer crash the process: they return a generic JSON 500 (details logged server-side); malformed JSON returns 400.
+- PostgreSQL configured but unreachable at boot: the app retries with backoff and then fails to start, instead of silently running on ephemeral local files. `/readyz` returns 503 while the database is unavailable.
+- Continuous ingestion no longer grows memory and per-batch CPU without bound: aggregation windows are capped and evicted with exact cumulative counters.
+- Deduplication keeps remembering recent events across its size limit (two-generation set instead of `clear()`).
+- Edge spool: batches permanently rejected (HTTP 400/422) move to a dead-letter table instead of blocking all later telemetry; HTTP 413 splits the batch.
+
+### Changed (action required on upgrade)
+- Production boot requires `AUTH_ADMIN_PASSWORD` (min 12 characters) and `SECRETS_ENCRYPTION_KEY`; the root `docker-compose.yml` now requires them and `GRAFANA_ADMIN_PASSWORD`.
+- New `TRUST_PROXY` setting: set it when running behind an ingress so rate limits and audit logs see real client IPs.
+- Tests read credentials from `vitest.config.ts`.
+
 ## [1.0.0] - 2026-11-22
 
 ### Added

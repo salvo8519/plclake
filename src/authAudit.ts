@@ -11,6 +11,8 @@ import {
   timingSafeStringEqual,
   type ApiAuthScope,
 } from './security.ts';
+import { isProductionRuntime } from './config/runtimeEnv.ts';
+import { logger } from './logger.ts';
 import { atomicWriteJson } from './utils/persistence.ts';
 import {
   buildTokenLifecycleEvent,
@@ -127,10 +129,41 @@ interface ActiveSession {
 
 const SESSION_TTL_MS = 12 * 60 * 60 * 1000;
 const MAX_LOCAL_AUDIT_ENTRIES = 2000;
+export const MIN_USER_PASSWORD_LENGTH = 8;
 
-function hashPasswordScrypt(password: string, salt: string): string {
-  return crypto.scryptSync(password, salt, 64).toString('hex');
+/** Built-in accounts. Passwords are never hard-coded: they come from the environment. */
+const BUILT_IN_ACCOUNTS = {
+  admin: { id: 'usr-admin', fullName: 'Plant Administrator', passwordEnv: 'AUTH_ADMIN_PASSWORD' },
+  operator: {
+    id: 'usr-operator',
+    email: 'operator@plant.local',
+    fullName: 'Shift Line Operator',
+    passwordEnv: 'AUTH_DEMO_OPERATOR_PASSWORD',
+  },
+  viewer: {
+    id: 'usr-viewer',
+    email: 'controller@plant.local',
+    fullName: 'BI & Controllo Gestione',
+    passwordEnv: 'AUTH_DEMO_VIEWER_PASSWORD',
+  },
+} as const;
+
+/**
+ * Async scrypt so password hashing (deliberately CPU-expensive) runs on the libuv thread
+ * pool instead of blocking the event loop for every login.
+ */
+function hashPasswordScrypt(password: string, salt: string): Promise<string> {
+  return new Promise((resolve, reject) => {
+    crypto.scrypt(password, salt, 64, (err, derived) => {
+      if (err) reject(err);
+      else resolve(derived.toString('hex'));
+    });
+  });
 }
+
+// Constant-cost decoy used when the email is unknown, so response time does not reveal
+// which accounts exist.
+const DECOY_PASSWORD_SALT = crypto.randomBytes(16).toString('hex');
 
 function sha256(val: string): string {
   return crypto.createHash('sha256').update(val).digest('hex');
@@ -285,50 +318,80 @@ export class AuthAuditManager {
     await this.loadApiTokens();
 
     if (this.users.length === 0) {
-      const now = new Date().toISOString();
-      const adminEmail = (process.env.AUTH_ADMIN_EMAIL || 'admin@plant.local').trim().toLowerCase();
-      const adminPass = process.env.AUTH_ADMIN_PASSWORD || 'AdminPlant2026!';
-      const adminSalt = crypto.randomBytes(16).toString('hex');
+      await this.seedBuiltInUsers();
+    }
+  }
 
-      const opSalt = crypto.randomBytes(16).toString('hex');
-      const viewerSalt = crypto.randomBytes(16).toString('hex');
+  /**
+   * First-boot accounts. Production requires AUTH_ADMIN_PASSWORD (validated at boot) and never
+   * seeds demo users. Outside production, missing passwords are generated randomly and written
+   * once to an owner-only file instead of being logged or hard-coded.
+   */
+  private async seedBuiltInUsers(): Promise<void> {
+    const now = new Date().toISOString();
+    const generated: string[] = [];
+    const resolvePassword = (envName: string, email: string): string => {
+      const fromEnv = process.env[envName];
+      if (fromEnv) return fromEnv;
+      if (isProductionRuntime()) {
+        throw new Error(`${envName} is required in production.`);
+      }
+      const random = crypto.randomBytes(18).toString('base64url');
+      generated.push(`${email}  ${random}`);
+      return random;
+    };
+    const buildAccount = async (
+      spec: { id: string; fullName: string },
+      email: string,
+      role: UserRole,
+      password: string
+    ): Promise<StoredUserAccount> => {
+      const salt = crypto.randomBytes(16).toString('hex');
+      return {
+        id: spec.id,
+        email,
+        fullName: spec.fullName,
+        role,
+        active: true,
+        createdAt: now,
+        lastLoginAt: null,
+        passwordSalt: salt,
+        passwordHash: await hashPasswordScrypt(password, salt),
+      };
+    };
 
-      this.users = [
-        {
-          id: 'usr-admin',
-          email: adminEmail,
-          fullName: 'Plant Administrator',
-          role: 'admin',
-          active: true,
-          createdAt: now,
-          lastLoginAt: null,
-          passwordSalt: adminSalt,
-          passwordHash: hashPasswordScrypt(adminPass, adminSalt),
-        },
-        {
-          id: 'usr-operator',
-          email: 'operator@plant.local',
-          fullName: 'Shift Line Operator',
-          role: 'operator',
-          active: true,
-          createdAt: now,
-          lastLoginAt: null,
-          passwordSalt: opSalt,
-          passwordHash: hashPasswordScrypt('OperatorPlant2026!', opSalt),
-        },
-        {
-          id: 'usr-viewer',
-          email: 'controller@plant.local',
-          fullName: 'BI & Controllo Gestione',
-          role: 'viewer',
-          active: true,
-          createdAt: now,
-          lastLoginAt: null,
-          passwordSalt: viewerSalt,
-          passwordHash: hashPasswordScrypt('ViewerPlant2026!', viewerSalt),
-        },
-      ];
-      await this.persistUsers();
+    const adminEmail = (process.env.AUTH_ADMIN_EMAIL || 'admin@plant.local').trim().toLowerCase();
+    const { admin, operator, viewer } = BUILT_IN_ACCOUNTS;
+    const users: StoredUserAccount[] = [
+      await buildAccount(admin, adminEmail, 'admin', resolvePassword(admin.passwordEnv, adminEmail)),
+    ];
+    if (!isProductionRuntime() && process.env.AUTH_SEED_DEMO_USERS === 'true') {
+      users.push(
+        await buildAccount(
+          operator,
+          operator.email,
+          'operator',
+          resolvePassword(operator.passwordEnv, operator.email)
+        ),
+        await buildAccount(viewer, viewer.email, 'viewer', resolvePassword(viewer.passwordEnv, viewer.email))
+      );
+    }
+    this.users = users;
+    await this.persistUsers();
+
+    if (generated.length > 0) {
+      const credentialsFile = path.resolve(this.rootDir, '.state', 'initial-credentials.txt');
+      await fs.mkdir(path.dirname(credentialsFile), { recursive: true });
+      await fs.writeFile(
+        credentialsFile,
+        `# Generated at first boot (non-production). Change these passwords and delete this file.\n${generated.join('\n')}\n`,
+        { encoding: 'utf-8', mode: 0o600 }
+      );
+      logger.warn('security', 'Generated random passwords for built-in accounts', {
+        event: 'auth.initial_credentials_generated',
+        file: credentialsFile,
+        accounts: generated.length,
+      });
     }
   }
 
@@ -488,8 +551,8 @@ export class AuthAuditManager {
     if (!email || !email.includes('@')) {
       throw new Error('Valid email address is required.');
     }
-    if (!input.password || input.password.length < 8) {
-      throw new Error('Password must be at least 8 characters long.');
+    if (!input.password || input.password.length < MIN_USER_PASSWORD_LENGTH) {
+      throw new Error(`Password must be at least ${MIN_USER_PASSWORD_LENGTH} characters long.`);
     }
     if (this.users.some((u) => u.email === email)) {
       throw new Error(`User with email '${email}' already exists.`);
@@ -508,7 +571,7 @@ export class AuthAuditManager {
       createdAt: new Date().toISOString(),
       lastLoginAt: null,
       passwordSalt: salt,
-      passwordHash: hashPasswordScrypt(input.password, salt),
+      passwordHash: await hashPasswordScrypt(input.password, salt),
     };
     this.users.push(created);
     await this.persistUsers();
@@ -522,6 +585,10 @@ export class AuthAuditManager {
   ): Promise<UserAccountPublic | null> {
     const target = this.users.find((u) => u.id === userId);
     if (!target) return null;
+    // Validate before mutating anything, so a rejected patch leaves the account untouched.
+    if (patch.password !== undefined && patch.password.length < MIN_USER_PASSWORD_LENGTH) {
+      throw new Error(`Password must be at least ${MIN_USER_PASSWORD_LENGTH} characters long.`);
+    }
 
     const cascadeRevokedTokens: ApiTokenPublic[] = [];
 
@@ -532,9 +599,7 @@ export class AuthAuditManager {
       target.active = patch.active;
       if (!target.active) {
         // Revoke active sessions and managed API keys for disabled user
-        for (const [key, sess] of this.sessions.entries()) {
-          if (sess.userId === target.id) this.sessions.delete(key);
-        }
+        this.revokeSessionsForUser(target.id);
         const revokedAt = new Date().toISOString();
         const revokedBy = context?.actor || 'system:user-disabled';
         for (const tok of this.apiTokens) {
@@ -553,10 +618,12 @@ export class AuthAuditManager {
     if (typeof patch.fullName === 'string' && patch.fullName.trim()) {
       target.fullName = patch.fullName.trim().slice(0, 80);
     }
-    if (typeof patch.password === 'string' && patch.password.length >= 8) {
+    if (typeof patch.password === 'string') {
       const salt = crypto.randomBytes(16).toString('hex');
       target.passwordSalt = salt;
-      target.passwordHash = hashPasswordScrypt(patch.password, salt);
+      target.passwordHash = await hashPasswordScrypt(patch.password, salt);
+      // A password change invalidates every existing session of that account.
+      this.revokeSessionsForUser(target.id);
     }
     await this.persistUsers();
 
@@ -583,12 +650,17 @@ export class AuthAuditManager {
   ): Promise<{ token: string; user: UserAccountPublic; expiresAt: string } | null> {
     const email = emailInput.trim().toLowerCase();
     const user = this.users.find((u) => u.email === email && u.active);
-    if (!user) return null;
+    if (!user) {
+      await hashPasswordScrypt(password, DECOY_PASSWORD_SALT);
+      return null;
+    }
 
-    const candidateHash = hashPasswordScrypt(password, user.passwordSalt);
+    const candidateHash = await hashPasswordScrypt(password, user.passwordSalt);
     if (!timingSafeStringEqual(candidateHash, user.passwordHash)) {
       return null;
     }
+
+    this.pruneExpiredSessions();
 
     const token = `sess_${crypto.randomBytes(24).toString('hex')}`;
     const tokenHash = sha256(token);
@@ -603,6 +675,19 @@ export class AuthAuditManager {
       user: toPublicUser(user),
       expiresAt: new Date(expiresAtMs).toISOString(),
     };
+  }
+
+  private revokeSessionsForUser(userId: string): void {
+    for (const [key, sess] of this.sessions.entries()) {
+      if (sess.userId === userId) this.sessions.delete(key);
+    }
+  }
+
+  /** Drops expired sessions so the in-memory map stays bounded by active sessions only. */
+  private pruneExpiredSessions(nowMs = Date.now()): void {
+    for (const [key, sess] of this.sessions.entries()) {
+      if (nowMs > sess.expiresAtMs) this.sessions.delete(key);
+    }
   }
 
   revokeSessionToken(token: string): boolean {

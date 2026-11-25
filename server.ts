@@ -64,6 +64,12 @@ import {
 } from './src/serverConfig.ts';
 import { SimulationRunManager } from './src/simulationRunner.ts';
 import { atomicWriteJson, flushPendingWrites, sanitizeCsvCell } from './src/utils/persistence.ts';
+import { createJsonErrorHandler, forwardAsyncErrors } from './src/utils/asyncRouter.ts';
+import {
+  collectProductionConfigErrors,
+  isProductionRuntime,
+  resolveTrustProxySetting,
+} from './src/config/runtimeEnv.ts';
 import type {
   JobConfig,
   LiveRunSnapshot,
@@ -143,6 +149,15 @@ export interface CreateAppOptions {
 }
 
 export async function createApp(options: CreateAppOptions = {}) {
+  const productionConfigErrors = collectProductionConfigErrors();
+  if (productionConfigErrors.length > 0) {
+    throw new Error(`Refusing to start with insecure production configuration:\n- ${productionConfigErrors.join('\n- ')}`);
+  }
+  if (isProductionRuntime() && process.env.API_ENFORCE_AUTH === 'false') {
+    logger.warn('security', 'API_ENFORCE_AUTH=false is ignored in production: authentication stays enforced', {
+      event: 'auth.enforcement_override_ignored',
+    });
+  }
   const rootDir = options.rootDir ?? DEFAULT_ROOT_DIR;
   const configStateFile = path.resolve(rootDir, '.state', 'job-config.json');
   const dbStore = options.dbStore ?? new DatabaseStore();
@@ -210,6 +225,8 @@ export async function createApp(options: CreateAppOptions = {}) {
 
   const app = express();
   app.disable('x-powered-by');
+  // Real client IPs for rate limiting and audit behind an ingress (off by default: anti-spoofing).
+  app.set('trust proxy', resolveTrustProxySetting());
   app.use(securityHeadersMiddleware);
   app.use(express.json({ limit: '4mb' }));
   app.use(
@@ -276,6 +293,16 @@ export async function createApp(options: CreateAppOptions = {}) {
       return;
     }
     const storage = await dbStore.getHealthStatus();
+    if (dbStore.isConfigured() && !storage.connected) {
+      res.status(503).json({
+        status: 'database_unavailable',
+        name: APP_NAME,
+        version: APP_VERSION,
+        siteId: resolveSiteId(),
+        timestamp: new Date().toISOString(),
+      });
+      return;
+    }
     res.status(200).json({
       status: 'ready',
       name: APP_NAME,
@@ -461,7 +488,7 @@ export async function createApp(options: CreateAppOptions = {}) {
     next();
   };
 
-  const apiRouter = express.Router();
+  const apiRouter = forwardAsyncErrors(express.Router());
 
   apiRouter.use((req, res, next) => {
     const { requestId } = getRequestContext(req, res);
@@ -753,16 +780,26 @@ export async function createApp(options: CreateAppOptions = {}) {
       });
       return;
     }
-    const updated = await authAuditManager.updateUser(
-      req.params.id,
-      {
-        role: req.body?.role,
-        active: typeof req.body?.active === 'boolean' ? req.body.active : undefined,
-        fullName: typeof req.body?.fullName === 'string' ? req.body.fullName : undefined,
-        password: typeof req.body?.password === 'string' ? req.body.password : undefined,
-      },
-      { actor, actorRole, requestId }
-    );
+    let updated: Awaited<ReturnType<typeof authAuditManager.updateUser>>;
+    try {
+      updated = await authAuditManager.updateUser(
+        req.params.id,
+        {
+          role: req.body?.role,
+          active: typeof req.body?.active === 'boolean' ? req.body.active : undefined,
+          fullName: typeof req.body?.fullName === 'string' ? req.body.fullName : undefined,
+          password: typeof req.body?.password === 'string' ? req.body.password : undefined,
+        },
+        { actor, actorRole, requestId }
+      );
+    } catch (err) {
+      res.status(400).json({
+        error: err instanceof Error ? err.message : 'Invalid user update.',
+        tier,
+        requestId,
+      });
+      return;
+    }
     if (!updated) {
       res.status(404).json({ error: 'User not found', tier, requestId });
       return;
@@ -2111,6 +2148,8 @@ export async function createApp(options: CreateAppOptions = {}) {
     }
   }
 
+  app.use(createJsonErrorHandler(logger));
+
   /**
    * Drains background persistence (audit log, token usage, atomic `.state/` writes).
    * Must run after the HTTP server stops accepting requests and before the DB pool
@@ -2190,5 +2229,10 @@ if (isMainEntry) {
     process.on('SIGINT', () => {
       void gracefulShutdown('SIGINT');
     });
+  }).catch((err: unknown) => {
+    logger.error('system', 'Server failed to start', {
+      error: err instanceof Error ? err.message : String(err),
+    });
+    process.exit(1);
   });
 }

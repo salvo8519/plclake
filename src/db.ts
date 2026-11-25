@@ -221,6 +221,11 @@ export class DatabaseStore {
     return this.connected && this.pool !== null;
   }
 
+  /** True when PostgreSQL was requested (DATABASE_URL or injected pool): file fallback is not allowed. */
+  isConfigured(): boolean {
+    return this.databaseUrl !== null || this.pool !== null;
+  }
+
   async init(): Promise<boolean> {
     if (!this.pool && !this.databaseUrl) {
       this.connected = false;
@@ -240,17 +245,33 @@ export class DatabaseStore {
       });
     }
 
-    try {
-      await this.pool!.query('SELECT 1');
-      await this.pool!.query(BOOTSTRAP_DDL);
-      this.connected = true;
-      this.lastError = null;
-      return true;
-    } catch (err) {
-      this.connected = false;
-      this.lastError = err instanceof Error ? err.message : 'PostgreSQL connection failed';
-      return false;
+    // PostgreSQL often starts after the app (Compose, Kubernetes): retry with capped backoff.
+    // If it stays unreachable, fail the boot instead of silently running on ephemeral local
+    // files, which would diverge from the shared database and lose data on restart.
+    const maxAttempts = Math.max(1, Number(process.env.DATABASE_CONNECT_RETRIES) || 10);
+    let delayMs = 500;
+    for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+      try {
+        await this.pool!.query('SELECT 1');
+        await this.pool!.query(BOOTSTRAP_DDL);
+        this.connected = true;
+        this.lastError = null;
+        return true;
+      } catch (err) {
+        this.connected = false;
+        this.lastError = err instanceof Error ? err.message : 'PostgreSQL connection failed';
+        if (attempt < maxAttempts) {
+          const waitMs = delayMs;
+          await new Promise((resolve) => {
+            setTimeout(resolve, waitMs);
+          });
+          delayMs = Math.min(delayMs * 2, 5_000);
+        }
+      }
     }
+    throw new Error(
+      `PostgreSQL is configured (${this.databaseHost ?? 'unknown host'}) but unreachable after ${maxAttempts} attempts: ${this.lastError}`
+    );
   }
 
   async getState<T>(stateKey: string): Promise<T | null> {

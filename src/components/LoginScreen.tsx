@@ -20,28 +20,18 @@ interface LoginScreenProps {
   }) => void;
 }
 
+// Built-in role accounts for local quick-fill. Passwords are never shipped in the bundle:
+// they come from the server environment (or are generated and printed at first boot).
 const DEMO_ACCOUNTS = [
-  {
-    role: 'admin' as const,
-    email: 'admin@plant.local',
-    password: 'AdminPlant2026!',
-  },
-  {
-    role: 'operator' as const,
-    email: 'operator@plant.local',
-    password: 'OperatorPlant2026!',
-  },
-  {
-    role: 'viewer' as const,
-    email: 'controller@plant.local',
-    password: 'ViewerPlant2026!',
-  },
+  { role: 'admin' as const, email: 'admin@plant.local' },
+  { role: 'operator' as const, email: 'operator@plant.local' },
+  { role: 'viewer' as const, email: 'controller@plant.local' },
 ] as const;
 
 export function LoginScreen({ authEnforced, onAuthenticated }: LoginScreenProps) {
   const { t } = useTranslation('common');
   const [email, setEmail] = useState('admin@plant.local');
-  const [password, setPassword] = useState('AdminPlant2026!');
+  const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -197,7 +187,7 @@ export function LoginScreen({ authEnforced, onAuthenticated }: LoginScreenProps)
                       type="button"
                       onClick={() => {
                         setEmail(acct.email);
-                        setPassword(acct.password);
+                        setPassword('');
                         setError(null);
                       }}
                       className="px-2 py-1.5 text-left bg-[#f8f9fa] hover:bg-[#eef1f4] border border-hairline-strong rounded-[2px] cursor-pointer transition-colors"
