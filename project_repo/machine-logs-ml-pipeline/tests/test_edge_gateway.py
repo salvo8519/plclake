@@ -63,7 +63,9 @@ class EdgeGatewayTests(unittest.TestCase):
             # Start fake smart HTTP meter
             class MeterHandler(http.server.BaseHTTPRequestHandler):
                 def do_GET(self) -> None:  # noqa: N802
-                    body = json.dumps({"power_kw": 352.4, "frequency_hz": 50.01, "temp_c": 44.2}).encode("utf-8")
+                    body = json.dumps(
+                        {"power_kw": 352.4, "frequency_hz": 50.01, "temp_c": 44.2}
+                    ).encode("utf-8")
                     self.send_response(200)
                     self.send_header("Content-Type", "application/json")
                     self.end_headers()
@@ -119,12 +121,16 @@ class EdgeGatewayTests(unittest.TestCase):
                         self.send_response(202)
                         self.send_header("Content-Type", "application/json")
                         self.end_headers()
-                        self.wfile.write(json.dumps({"accepted": len(data.get("events", []))}).encode("utf-8"))
+                        self.wfile.write(
+                            json.dumps({"accepted": len(data.get("events", []))}).encode("utf-8")
+                        )
 
                     def log_message(self, format: str, *args: object) -> None:
                         return
 
-                ingest_srv = http.server.ThreadingHTTPServer(("127.0.0.1", ingest_port), IngestHandler)
+                ingest_srv = http.server.ThreadingHTTPServer(
+                    ("127.0.0.1", ingest_port), IngestHandler
+                )
                 ingest_thread = threading.Thread(target=ingest_srv.serve_forever, daemon=True)
                 ingest_thread.start()
                 try:
@@ -165,7 +171,12 @@ class EdgeGatewayTests(unittest.TestCase):
                         "poll_interval_sec": 2,
                         "auth_mode": "anonymous",
                         "tag_bindings": [
-                            {"source_tag": "HR:40001", "target_metric": "flow_nm3_h", "scale_factor": 0.1, "unit": "Nm3/h"}
+                            {
+                                "source_tag": "HR:40001",
+                                "target_metric": "flow_nm3_h",
+                                "scale_factor": 0.1,
+                                "unit": "Nm3/h",
+                            }
                         ],
                     }
                 ],

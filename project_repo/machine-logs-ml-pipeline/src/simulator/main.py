@@ -8,7 +8,7 @@ import random
 import time
 import uuid
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -133,7 +133,7 @@ def resolve_spec(machine_type: str) -> dict[str, Any]:
 
 
 def _quarantine_id(reason: str, payload: str) -> str:
-    return hashlib.sha256(f"{reason}:{payload}".encode("utf-8")).hexdigest()[:16]
+    return hashlib.sha256(f"{reason}:{payload}".encode()).hexdigest()[:16]
 
 
 def build_s3_client() -> Any | None:
@@ -161,7 +161,7 @@ def ensure_bucket(s3_client: Any, bucket: str) -> None:
 
 def parse_topology(machines_arg: str | None) -> list[MachineProfile]:
     if not machines_arg:
-        return [MachineProfile(m, l, t) for m, l, t in DEFAULT_TOPOLOGY]
+        return [MachineProfile(m, line, t) for m, line, t in DEFAULT_TOPOLOGY]
 
     profiles: list[MachineProfile] = []
     for idx, raw_item in enumerate(machines_arg.split(",")):
@@ -170,13 +170,17 @@ def parse_topology(machines_arg: str | None) -> list[MachineProfile]:
             continue
         parts = item.split(":")
         machine_id = parts[0].strip()
-        line_id = parts[1].strip() if len(parts) > 1 and parts[1].strip() else f"line-0{(idx // 2) + 1}"
+        line_id = (
+            parts[1].strip() if len(parts) > 1 and parts[1].strip() else f"line-0{(idx // 2) + 1}"
+        )
         machine_type = (
             parts[2].strip()
             if len(parts) > 2 and parts[2].strip()
             else ("plc-controller" if line_id == "line-01" else "cnc-mill")
         )
-        profiles.append(MachineProfile(machine_id=machine_id, line_id=line_id, machine_type=machine_type))
+        profiles.append(
+            MachineProfile(machine_id=machine_id, line_id=line_id, machine_type=machine_type)
+        )
     return profiles
 
 
@@ -191,7 +195,7 @@ def write_telemetry_contract(
     expected_sample_sec = round(effective_interval * max(1, len(profiles)), 4)
     contract = {
         "schema_version": "2.0-common-envelope",
-        "updated_at": datetime.now(timezone.utc).isoformat(),
+        "updated_at": datetime.now(UTC).isoformat(),
         "machine_count": len(profiles),
         "rate_hz": rate_hz,
         "expected_sample_sec": expected_sample_sec,
@@ -214,7 +218,7 @@ def generate_event(
     rng: random.Random,
     now: datetime | None = None,
 ) -> dict[str, Any]:
-    event_time = now or datetime.now(timezone.utc)
+    event_time = now or datetime.now(UTC)
     spec = resolve_spec(profile.machine_type)
 
     if profile.in_maintenance_ticks > 0:
@@ -270,7 +274,12 @@ def generate_event(
         else spec["secondary_nominal"] * idle_factor
     )
     secondary_val = round(
-        max(0.01, secondary_base + secondary_span * excursion * 0.75 + rng.gauss(0, spec["secondary_std"])),
+        max(
+            0.01,
+            secondary_base
+            + secondary_span * excursion * 0.75
+            + rng.gauss(0, spec["secondary_std"]),
+        ),
         3,
     )
 
@@ -312,7 +321,7 @@ def generate_malformed_record(machine_id: str, rng: random.Random) -> tuple[str,
         payload = json.dumps(
             {
                 "event_id": f"evt-bad-{uuid.uuid4().hex[:8]}",
-                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "timestamp": datetime.now(UTC).isoformat(),
                 "machine_id": machine_id,
                 "metrics": {"temp_c": "NOT_A_NUMBER"},
                 "state": "RUNNING",
@@ -320,13 +329,19 @@ def generate_malformed_record(machine_id: str, rng: random.Random) -> tuple[str,
         )
         return "invalid_numeric_type", payload
     if kind == "missing_timestamp":
-        payload = json.dumps({"event_id": f"evt-bad-{uuid.uuid4().hex[:8]}", "machine_id": machine_id, "metrics": {"temp_c": 58.1}})
+        payload = json.dumps(
+            {
+                "event_id": f"evt-bad-{uuid.uuid4().hex[:8]}",
+                "machine_id": machine_id,
+                "metrics": {"temp_c": 58.1},
+            }
+        )
         return "missing_required_field", payload
     if kind == "out_of_range":
         payload = json.dumps(
             {
                 "event_id": f"evt-bad-{uuid.uuid4().hex[:8]}",
-                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "timestamp": datetime.now(UTC).isoformat(),
                 "machine_id": machine_id,
                 "metrics": {"temp_c": 9999.0, "vibration_mm_s": -4.0, "cycle_ms": 900},
                 "state": "FAULT",
@@ -350,7 +365,7 @@ def rotate_log_segment(log_path: Path, segments_dir: Path, seq: int) -> Path | N
     if not log_path.exists() or log_path.stat().st_size == 0:
         return None
     segments_dir.mkdir(parents=True, exist_ok=True)
-    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
     segment_path = segments_dir / f"telemetry.{stamp}.{seq:04d}.jsonl"
     log_path.replace(segment_path)
     log_path.touch()
@@ -373,7 +388,7 @@ def run_loop(
     segments_dir.mkdir(parents=True, exist_ok=True)
     quarantine_file.parent.mkdir(parents=True, exist_ok=True)
     log_path = out_dir / "telemetry.jsonl"
-    rng = random.Random(seed)
+    rng = random.Random(seed)  # noqa: S311
 
     write_telemetry_contract(out_dir=out_dir, profiles=profiles, interval_sec=interval_sec)
 
@@ -405,7 +420,7 @@ def run_loop(
                 seen_quarantine_ids.add(qid)
                 q_entry = {
                     "quarantine_id": qid,
-                    "quarantined_at": datetime.now(timezone.utc).isoformat(),
+                    "quarantined_at": datetime.now(UTC).isoformat(),
                     "source": "simulator",
                     "error_reason": reason,
                     "raw_payload": bad_payload,
@@ -430,7 +445,7 @@ def run_loop(
             rotated = rotate_log_segment(log_path, segments_dir, segment_seq)
             lines_in_current_segment = 0
             if rotated is not None and upload_s3:
-                day_prefix = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+                day_prefix = datetime.now(UTC).strftime("%Y-%m-%d")
                 upload_file_safe(
                     s3_client,
                     raw_bucket,
@@ -440,7 +455,7 @@ def run_loop(
 
         count += 1
         if upload_s3 and count % 100 == 0:
-            day_prefix = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+            day_prefix = datetime.now(UTC).strftime("%Y-%m-%d")
             upload_file_safe(
                 s3_client,
                 quarantine_bucket,
@@ -458,21 +473,29 @@ def run_loop(
 def main() -> None:
     parser = argparse.ArgumentParser(description="Multi-domain industrial telemetry simulator")
     parser.add_argument("--interval-sec", type=float, default=None)
-    parser.add_argument("--rate-hz", type=float, default=2.0, help="Target events per second across fleet")
-    parser.add_argument("--duration-minutes", type=float, default=None, help="Optional run duration in minutes")
-    parser.add_argument("--rotate-max-lines", type=int, default=2000, help="Rotate telemetry.jsonl after N lines")
+    parser.add_argument(
+        "--rate-hz", type=float, default=2.0, help="Target events per second across fleet"
+    )
+    parser.add_argument(
+        "--duration-minutes", type=float, default=None, help="Optional run duration in minutes"
+    )
+    parser.add_argument(
+        "--rotate-max-lines", type=int, default=2000, help="Rotate telemetry.jsonl after N lines"
+    )
     parser.add_argument("--out-dir", type=Path, default=Path("/var/log/machines"))
-    parser.add_argument("--quarantine-file", type=Path, default=Path("/var/log/machines/quarantine.jsonl"))
-    parser.add_argument("--machines", type=str, default=None, help="Comma-separated M-01:line-01:plc-controller")
+    parser.add_argument(
+        "--quarantine-file", type=Path, default=Path("/var/log/machines/quarantine.jsonl")
+    )
+    parser.add_argument(
+        "--machines", type=str, default=None, help="Comma-separated M-01:line-01:plc-controller"
+    )
     parser.add_argument("--max-events", type=int, default=None)
     parser.add_argument("--upload-s3", action="store_true")
     parser.add_argument("--seed", type=int, default=42)
     args = parser.parse_args()
 
     effective_interval = (
-        args.interval_sec
-        if args.interval_sec is not None
-        else (1.0 / max(0.05, args.rate_hz))
+        args.interval_sec if args.interval_sec is not None else (1.0 / max(0.05, args.rate_hz))
     )
     profiles = parse_topology(args.machines)
     run_loop(

@@ -8,6 +8,7 @@ and authenticated HTTP REST endpoints before factory cutover.
 Usage:
     python -m edge_gateway.plc_simulator --modbus-port 1502 --http-port 18080
 """
+
 from __future__ import annotations
 
 import argparse
@@ -168,7 +169,9 @@ class VirtualPlcBench:
                         self.wfile.write(b'{"error":"Unauthorized meter request"}')
                         return
 
-                body = json.dumps({"status": "RUNNING", "metrics": bench.http_metrics}).encode("utf-8")
+                body = json.dumps({"status": "RUNNING", "metrics": bench.http_metrics}).encode(
+                    "utf-8"
+                )
                 self.send_response(200)
                 self.send_header("Content-Type", "application/json")
                 self.send_header("Content-Length", str(len(body)))
@@ -194,7 +197,9 @@ class VirtualPlcBench:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Virtual Industrial PLC Bench (Modbus TCP + HTTP REST)")
+    parser = argparse.ArgumentParser(
+        description="Virtual Industrial PLC Bench (Modbus TCP + HTTP REST)"
+    )
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--modbus-port", type=int, default=1502)
     parser.add_argument("--http-port", type=int, default=18080)

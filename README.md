@@ -1,4 +1,6 @@
-# PLCLake - Industrial Telemetry connector 
+# PLCLake — Industrial Telemetry Connector
+
+**Industrial Telemetry, Edge Gateway & ML Lakehouse Platform**
 
 <p align="center">
   <strong>English</strong> · <a href="README.it.md">Italiano</a>
@@ -7,14 +9,14 @@
 <!-- BADGES:START -->
 <p align="center">
   <img src="https://img.shields.io/badge/Release-v1.0.0-C9A45C?style=flat-square&labelColor=0B1622" alt="Release" />
-  <img src="https://img.shields.io/badge/OpenAPI-3.1.0%20%C2%B7%2051%20endpoints-16324F?style=flat-square&labelColor=0B1622&logo=openapiinitiative&logoColor=FFFFFF" alt="OpenAPI" />
-  <img src="https://img.shields.io/badge/i18n-EN%20%7C%20IT%20%C2%B7%201194%20keys-C9A45C?style=flat-square&labelColor=0B1622&logo=i18next&logoColor=FFFFFF" alt="i18n" />
+  <img src="https://img.shields.io/badge/OpenAPI-3.1.0%20%C2%B7%2051%20endpoints-16324F?style=flat-square&labelColor=0B1622" alt="OpenAPI" />
+  <img src="https://img.shields.io/badge/i18n-EN%20%7C%20IT%20%C2%B7%201202%20keys-C9A45C?style=flat-square&labelColor=0B1622" alt="i18n" />
   <img src="https://img.shields.io/badge/Zensical%20Docs-8%C3%972%20EN%2FIT%20pages-16324F?style=flat-square&labelColor=0B1622" alt="Docs" />
-  <img src="https://img.shields.io/badge/CI%20Gate-ESLint%20%C2%B7%20Biome%20%C2%B7%20Ruff%20%C2%B7%20Vitest-0F6B54?style=flat-square&labelColor=0B1622&logo=githubactions&logoColor=FFFFFF" alt="CI Gate" />
+  <img src="https://img.shields.io/badge/CI%20Gate-ESLint%20%C2%B7%20Biome%20%C2%B7%20Ruff%20%C2%B7%20Vitest-0F6B54?style=flat-square&labelColor=0B1622" alt="CI Gate" />
   <br />
-  <img src="https://img.shields.io/badge/React-19.0.1-16324F?style=flat-square&labelColor=0B1622&logo=react&logoColor=FFFFFF" alt="React" />
-  <img src="https://img.shields.io/badge/TypeScript-6.0.3-16324F?style=flat-square&labelColor=0B1622&logo=typescript&logoColor=FFFFFF" alt="TypeScript" />
-  <img src="https://img.shields.io/badge/Express-4.21.2-16324F?style=flat-square&labelColor=0B1622&logo=express&logoColor=FFFFFF" alt="Express" />
+  <img src="https://img.shields.io/badge/React-19.0.1-16324F?style=flat-square&labelColor=0B1622" alt="React" />
+  <img src="https://img.shields.io/badge/TypeScript-6.0.3-16324F?style=flat-square&labelColor=0B1622" alt="TypeScript" />
+  <img src="https://img.shields.io/badge/Express-4.21.2-16324F?style=flat-square&labelColor=0B1622" alt="Express" />
   <img src="https://img.shields.io/badge/i18next-27.2.6-C9A45C?style=flat-square&labelColor=0B1622" alt="i18next" />
   <img src="https://img.shields.io/badge/Security-RBAC%20%C2%B7%20AES--256--GCM%20%C2%B7%20scrypt-0F6B54?style=flat-square&labelColor=0B1622" alt="Security" />
 </p>
@@ -22,20 +24,97 @@
 
 ---
 
-## Executive Overview
+## What is PLCLake?
 
-**PLCLake** is an on-premise and hybrid-ready industrial telemetry platform engineered for **OT/IT Plant Operations**, **Predictive Maintenance ML**, and **Finance & Management Controlling**. It ingests real-time telemetry from heterogeneous shop-floor assets (Siemens S7-1500, Rockwell ControlLogix, CNC mills, gas flow meters, compressors, and power meters), transforms streams into incremental **Hot/Cold Lakehouse Feature Marts** (PostgreSQL 16 + ZSTD Apache Parquet on Garage S3), and serves governed, bilingual (**EN / IT**) APIs and dashboards for **Grafana** and **Power BI**.
+**PLCLake** collects live data from factory machines (PLCs, CNC mills, compressors, power and gas meters) and turns it into **real-time operational visibility**, **early fault alerts**, and **clean analytics datasets** for Grafana, Power BI, and Predictive Maintenance — without requiring complex or expensive big-data clusters on the shop floor.
 
-### Institutional Industrial Architecture
+It is built to run **on-premise inside a plant**, in **isolated (air-gapped) networks**, or on **cloud / Kubernetes** environments.
 
-- **Full Bilingual Platform (`EN | IT`)**: Powered by `i18next` & `react-i18next`, with synchronized language switching across the authenticated Web Console, **Scalar OpenAPI 3.1 Reference** (`/api/v1/docs?lang=en|it`), and **Zensical Documentation** (`docs/en/` & `docs/it/`).
-- **Industrial Midnight Steel & Brushed Brass Visual System**: Midnight Steel chrome (`#0B1622`), Prussian Steel Blue primary actions (`#16324F`), Brushed Brass accents (`#C9A45C`), crisp squared `2px` geometry, and borderless horizontal-hairline editorial tables across the console and documentation site.
-- **API-First Secret & RBAC Governance**: Managed `X-API-Key` (`pat_live_...`) lifecycle stored as AES-256-GCM encrypted SHA-256 hashes, automated `SecretManagement` → `AuditLogSystem` event subscriber, interactive 1-hour Scalar sandbox key modal, and separated **Users** and **Roles & Permissions** administration views (10 RBAC views).
-- **Zero-Drift Solo-Maintainer Automation**: **ESLint (Airbnb style guide)** & Rust-powered **Biome** (frontend + backend TS/React), **Ruff** (Python Edge Gateway), **Husky** (`.husky/pre-commit`) + **`lint-staged`**, `.gitlab-ci.yml`, `renovate.json`, and automated CI verification of EN/IT parity and static OpenAPI/Scalar drift (`npm run check:i18n`).
+```mermaid
+flowchart LR
+  A["Factory Assets<br/>PLC · CNC · Power & Gas Meters"] --> B["Edge Gateway<br/>Local Buffer · Auto-Sync"]
+  B --> C["PLCLake Platform<br/>Validation · Alerts · Governance"]
+  C --> D["Hot Storage<br/>PostgreSQL 16"]
+  C --> E["Cold Lakehouse<br/>Parquet · S3"]
+  D --> F["Grafana · Power BI · ML"]
+```
+
+---
+
+## Value by Audience
+
+| Audience | What PLCLake Delivers |
+| :--- | :--- |
+| **Plant & Operations Managers** | Live monitoring of machine status, anomalies, and downtime, with automated email and webhook alerts before failures escalate. |
+| **Business & Finance Controllers** | Clean, structured daily feeds for availability (OEE), downtime hours, energy usage (kWh), and gas volume (Nm3) ready for Power BI and Grafana. |
+| **CTO, Tech Leads & IT/OT Teams** | Lightweight, maintainable full-stack architecture (React, TypeScript, Node.js, PostgreSQL, Python Edge), typed OpenAPI 3.1 APIs, enterprise RBAC, and turnkey Docker/Helm deployment. |
+
+---
+
+## Platform Preview
+
+### Live Telemetry Streaming
+
+![PLCLake Live Telemetry Streaming](docs/assets/screenshots/00-live-stream-demo-en.gif)
+
+### Core Views at a Glance
+
+<table>
+  <tr>
+    <td width="50%" valign="top">
+      <a href="docs/assets/screenshots/01-live-console-en.png"><img src="docs/assets/screenshots/01-live-console-en.png" alt="PLCLake Live Operations Console" width="100%" /></a>
+      <br />
+      <strong>1. Live Operations Console</strong><br />
+      Real-time KPI counters, quarantined anomalies, and raw JSON telemetry inspection.
+    </td>
+    <td width="50%" valign="top">
+      <a href="docs/assets/screenshots/02-plc-catalog-en.png"><img src="docs/assets/screenshots/02-plc-catalog-en.png" alt="PLCLake Dynamic PLC Catalog" width="100%" /></a>
+      <br />
+      <strong>2. Dynamic PLC Catalog</strong><br />
+      Configure Siemens, Rockwell, CNC, Gas, and Power profiles, protocols, and thresholds.
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top">
+      <a href="docs/assets/screenshots/03-rbac-roles-en.png"><img src="docs/assets/screenshots/03-rbac-roles-en.png" alt="PLCLake Roles and Permissions" width="100%" /></a>
+      <br />
+      <strong>3. Role-Based Access Control (RBAC)</strong><br />
+      Manage view visibility and permissions for <code>Admin</code>, <code>Operator</code>, and <code>Viewer</code> roles.
+    </td>
+    <td width="50%" valign="top">
+      <a href="docs/assets/screenshots/04-api-docs-en.png"><img src="docs/assets/screenshots/04-api-docs-en.png" alt="PLCLake Interactive OpenAPI 3.1 Portal" width="100%" /></a>
+      <br />
+      <strong>4. Interactive OpenAPI 3.1 Portal</strong><br />
+      Explore and test all 51 typed endpoints with built-in authentication and <code>EN | IT</code> docs.
+    </td>
+  </tr>
+</table>
+
+---
+
+## Key Capabilities
+
+- **Live Telemetry & Simulation Console**: Monitor incoming machine streams, inspect raw JSON payloads, isolate malformed records automatically in quarantine, and evaluate fleet health in real time.
+- **Dynamic PLC Catalog & Plant Connectivity**: Configure industrial assets (Siemens, Rockwell, CNC, Gas, Power) with custom channels, connectivity probes, and zero-downtime edge auto-sync.
+- **Security, Access Control & Auditability**: Role-based access (`Admin`, `Operator`, `Viewer`), managed API keys with expiration and rotation, encrypted credentials at rest, and an immutable audit log of every operational change.
+- **Bilingual by Design (`EN | IT`)**: Web console, interactive API portal, and technical documentation are synchronized 1:1 in English and Italian.
+- **Deployment Ready**: Centralized release versioning (`config/app.json` + `/api/v1/version`), hardened non-root Docker image, turnkey on-premise Compose stack, Kubernetes/k3s Helm chart, and automated CI/CD quality gates.
+
+---
+
+## Architecture Highlights (For Technical Teams)
+
+- **Zero Over-Engineering**: PostgreSQL 16 + PgBouncer for fast recent queries ("Hot" tier) paired with compressed Parquet on S3 ("Cold" tier) — no Kafka or Spark clusters to maintain on-site.
+- **Contract-First APIs**: 51 OpenAPI 3.1 endpoints generated directly from Zod schemas, with two-tier validation (`permissive` for resilient ingestion, `strict` for integrations) and interactive Scalar docs.
+- **Production Observability**: Built-in `/healthz`, `/readyz`, `/api/v1/version`, Prometheus `/metrics`, redacted structured JSON logs, and pre-provisioned Grafana dashboards.
+
+Deep-dive technical guides are available in the [Documentation Hub](docs/index.md).
 
 ---
 
 ## Quick Start
+
+### Local Development
 
 ```bash
 cp .env.example .env
@@ -44,7 +123,9 @@ npm run hooks:install
 npm run dev
 ```
 
-Or launch the full production stack (PLCLake + PostgreSQL 16 + Mailpit + Prometheus + Grafana) with Docker:
+### Production Stack with Docker
+
+Launches **PLCLake + PostgreSQL 16 + Mailpit + Prometheus + Grafana** in one command:
 
 ```bash
 docker compose up -d --build
@@ -53,40 +134,43 @@ docker compose up -d --build
 | Service | URL |
 | :--- | :--- |
 | **Web Console (EN / IT)** | `http://localhost:3000` |
-| **Centralized Version API** | `http://localhost:3000/api/v1/version` |
-| **Scalar OpenAPI 3.1 (EN)** | `http://localhost:3000/api/v1/docs?lang=en` |
-| **Scalar OpenAPI 3.1 (IT)** | `http://localhost:3000/api/v1/docs?lang=it` |
-| **OpenAPI 3.1 JSON Spec** | `http://localhost:3000/api/v1/openapi.json?lang=en` |
+| **Release Version API** | `http://localhost:3000/api/v1/version` |
+| **Interactive API Docs (EN)** | `http://localhost:3000/api/v1/docs?lang=en` |
+| **Interactive API Docs (IT)** | `http://localhost:3000/api/v1/docs?lang=it` |
 | **Prometheus Metrics** | `http://localhost:3000/api/v1/metrics` |
 
+For customer server installations or Staging/Production clusters, see:
+- **[On-Premise & Air-Gapped Docker Deployment](deploy/onprem/README.md)**
+- **[Kubernetes / k3s Helm Chart (Staging & Production)](deploy/helm/plclake/README.md)**
+
 ---
 
-## Autonomous Documentation & Governance
+## Documentation
 
-All platform documentation is mirrored 1:1 in English and Italian under `docs/en/` and `docs/it/` and published via **Zensical**:
+All documentation is mirrored 1:1 in English and Italian:
 
 - **[Documentation Hub (EN / IT)](docs/index.md)**
-- **[Architecture: OT/IT Topology & Edge Gateway](docs/en/architecture/ot-it-topology.md)**
-- **[Architecture: Hot/Cold Lakehouse & Big Data](docs/en/architecture/hot-cold-lakehouse.md)**
-- **[Guide: Dynamic PLC Catalog & Parameterized Output](docs/en/guides/plc-catalog-and-output.md)**
-- **[Guide: Day 1 — PLC to Grafana & Power BI](docs/en/guides/grafana-powerbi.md)**
-- **[Guide: i18n, CI & Solo-Maintainer Automation](docs/en/guides/i18n-and-docs-governance.md)**
-- **[Security: Multi-Scope Auth, Managed API Keys & Hardening](docs/en/security/api-auth-and-hardening.md)**
-- **[API Reference: Bilingual Scalar OpenAPI 3.1](docs/en/api/reference.md)**
+- **[OT/IT Topology & Edge Gateway](docs/en/architecture/ot-it-topology.md)**
+- **[Hot/Cold Lakehouse & Big Data](docs/en/architecture/hot-cold-lakehouse.md)**
+- **[Dynamic PLC Catalog & Output Contract](docs/en/guides/plc-catalog-and-output.md)**
+- **[Day 1 Guide: PLC to Grafana & Power BI](docs/en/guides/grafana-powerbi.md)**
+- **[Security: Auth, API Keys & Hardening](docs/en/security/api-auth-and-hardening.md)**
+- **[API Reference & Data Extraction Guide](docs/en/api/reference.md)**
+- **[i18n, CI & Maintainer Governance](docs/en/guides/i18n-and-docs-governance.md)**
 
 ---
 
-## Automated Quality Gates & Maintenance
+## Quality & Maintenance Commands
 
 ```bash
-npm run lint           # TypeScript strict check (tsc --noEmit)
-npm run lint:eslint    # ESLint Airbnb style guide (frontend + backend)
-npm run lint:code      # Biome Rust linter & formatter check (frontend + backend)
-npm run lint:fix       # Auto-fix formatting & lint issues via Biome + ESLint
-npm test               # Vitest API, RBAC, Token Lifecycle, Security & i18n suite
-npm run build:server   # Compile standalone ESM backend bundle (dist-server/server.mjs)
-npm run docs:openapi   # Export static EN/IT OpenAPI 3.1 specs to docs/api/
-npm run sync:badges    # Sync config/app.json version, package.json & README badges
-npm run check:i18n     # Enforce config/app.json, EN/IT parity, OpenAPI/Scalar drift & links
-npm run verify         # Full pre-push gate (TypeCheck + ESLint + Biome + i18n + Tests + Builds)
+npm run verify         # Full pre-push gate (TypeScript, ESLint, Biome, i18n, Vitest, Frontend & Server builds)
+npm test               # Automated security, RBAC, token lifecycle, DB & API integration tests
+npm run sync:badges    # Sync config/app.json version across package.json, Helm Chart & README badges
+npm run docs:openapi   # Export static EN/IT OpenAPI 3.1 specs
 ```
+
+---
+
+## License
+
+Licensed under the [Apache License 2.0](LICENSE).

@@ -1,11 +1,10 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pandas as pd
-
 from dataset_builder.build_dataset import (
     BuilderCheckpoint,
     build_ml_features,
@@ -44,7 +43,9 @@ def test_simulator_generates_valid_rotated_and_contract(tmp_path: Path) -> None:
     assert contract_file.exists()
     assert len(list(segments_dir.glob("telemetry.*.jsonl"))) >= 1
 
-    ckpt = BuilderCheckpoint(processed_segments=[], active_offset=0, active_inode=None, high_watermark_ts=None)
+    ckpt = BuilderCheckpoint(
+        processed_segments=[], active_offset=0, active_inode=None, high_watermark_ts=None
+    )
     ingestion, next_ckpt = ingest_incremental_sources(log_file, segments_dir, ckpt)
     assert not ingestion.valid_df.empty
     assert set(ingestion.valid_df["line_id"].unique()).issubset({"line-01", "line-02"})
@@ -58,7 +59,7 @@ def test_builder_quarantines_malformed_lines_without_crashing(tmp_path: Path) ->
     log_file = tmp_path / "telemetry.jsonl"
     quarantine_file = tmp_path / "quarantine.jsonl"
 
-    base_ts = datetime(2026, 1, 15, 10, 0, 0, tzinfo=timezone.utc)
+    base_ts = datetime(2026, 1, 15, 10, 0, 0, tzinfo=UTC)
     lines = [
         json.dumps(
             {
@@ -115,7 +116,7 @@ def test_builder_quarantines_malformed_lines_without_crashing(tmp_path: Path) ->
 def test_ml_features_horizon_target_and_idempotent_parquet_export(tmp_path: Path) -> None:
     log_file = tmp_path / "telemetry.jsonl"
     out_dir = tmp_path / "ml_dataset"
-    base_ts = datetime(2026, 1, 15, 10, 0, 0, tzinfo=timezone.utc)
+    base_ts = datetime(2026, 1, 15, 10, 0, 0, tzinfo=UTC)
 
     # Window 1 (10:00): nominal RUNNING; Window 2 (10:05): FAULT
     events = [
@@ -189,7 +190,9 @@ def test_ml_features_horizon_target_and_idempotent_parquet_export(tmp_path: Path
 
 def test_checkpoint_and_contract_persistence(tmp_path: Path) -> None:
     ckpt_file = tmp_path / "state" / "ckpt.json"
-    ckpt = BuilderCheckpoint(["telemetry.20260115.0001.jsonl"], 1024, 99, "2026-01-15T10:05:00+00:00")
+    ckpt = BuilderCheckpoint(
+        ["telemetry.20260115.0001.jsonl"], 1024, 99, "2026-01-15T10:05:00+00:00"
+    )
     save_checkpoint(ckpt_file, ckpt)
     loaded = load_checkpoint(ckpt_file)
     assert loaded.active_offset == 1024
@@ -203,7 +206,7 @@ def test_checkpoint_and_contract_persistence(tmp_path: Path) -> None:
 def test_multi_domain_envelope_and_duckdb_compaction(tmp_path: Path) -> None:
     log_file = tmp_path / "telemetry.jsonl"
     out_dir = tmp_path / "lakehouse"
-    base_ts = datetime(2026, 2, 10, 8, 0, 0, tzinfo=timezone.utc)
+    base_ts = datetime(2026, 2, 10, 8, 0, 0, tzinfo=UTC)
 
     batch1 = [
         {

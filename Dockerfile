@@ -7,7 +7,7 @@
 FROM node:22-alpine AS deps
 WORKDIR /app
 
-COPY package.json package-lock.json* ./
+COPY package.json package-lock.json* .npmrc* ./
 RUN if [ -f package-lock.json ]; then \
       npm ci --no-audit --no-fund --ignore-scripts; \
     else \
@@ -28,7 +28,7 @@ RUN npm run build && npm run build:server
 FROM node:22-alpine AS prod-deps
 WORKDIR /app
 
-COPY package.json package-lock.json* ./
+COPY package.json package-lock.json* .npmrc* ./
 RUN if [ -f package-lock.json ]; then \
       npm ci --omit=dev --no-audit --no-fund --ignore-scripts; \
     else \

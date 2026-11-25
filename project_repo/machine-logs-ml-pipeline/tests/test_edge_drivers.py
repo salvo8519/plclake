@@ -5,7 +5,6 @@ import tempfile
 from pathlib import Path
 
 import pytest
-
 from edge_gateway.collector import (
     ConnectionSpec,
     EdgeCollector,
@@ -40,7 +39,9 @@ def test_modbus_tag_parsing_and_decoding() -> None:
 
 
 def test_live_modbus_tcp_and_http_rest_against_virtual_plc_bench() -> None:
-    bench = VirtualPlcBench(host="127.0.0.1", modbus_port=0, http_port=0, http_bearer_token="meter_secret_123")
+    bench = VirtualPlcBench(
+        host="127.0.0.1", modbus_port=0, http_port=0, http_bearer_token="meter_secret_123"
+    )
     bench.start()
     prev_token = os.environ.get("EDGE_HTTP_METER_TOKEN")
     os.environ["EDGE_HTTP_METER_TOKEN"] = "meter_secret_123"
@@ -57,11 +58,30 @@ def test_live_modbus_tcp_and_http_rest_against_virtual_plc_bench() -> None:
             port=bench.modbus_port,
             endpoint_or_topic="unit=1",
             tag_bindings=[
-                TagBinding(source_tag="HR:40001", target_metric="flow_nm3_h", scale_factor=0.1, unit="Nm3/h"),
-                TagBinding(source_tag="HR:40003:float32", target_metric="pressure_bar", scale_factor=1.0, unit="bar"),
-                TagBinding(source_tag="HR:40005", target_metric="temp_c", scale_factor=0.1, unit="C"),
-                TagBinding(source_tag="IR:30001:int16", target_metric="ambient_delta_c", scale_factor=0.1, unit="C"),
-                TagBinding(source_tag="COIL:1", target_metric="valve_open", scale_factor=1.0, unit="bool"),
+                TagBinding(
+                    source_tag="HR:40001",
+                    target_metric="flow_nm3_h",
+                    scale_factor=0.1,
+                    unit="Nm3/h",
+                ),
+                TagBinding(
+                    source_tag="HR:40003:float32",
+                    target_metric="pressure_bar",
+                    scale_factor=1.0,
+                    unit="bar",
+                ),
+                TagBinding(
+                    source_tag="HR:40005", target_metric="temp_c", scale_factor=0.1, unit="C"
+                ),
+                TagBinding(
+                    source_tag="IR:30001:int16",
+                    target_metric="ambient_delta_c",
+                    scale_factor=0.1,
+                    unit="C",
+                ),
+                TagBinding(
+                    source_tag="COIL:1", target_metric="valve_open", scale_factor=1.0, unit="bool"
+                ),
             ],
         )
         raw_modbus = poll_connection(modbus_conn, timeout_sec=2.0)
@@ -86,9 +106,21 @@ def test_live_modbus_tcp_and_http_rest_against_virtual_plc_bench() -> None:
             endpoint_or_topic="/api/v1/telemetry",
             auth_mode="bearer-token",
             tag_bindings=[
-                TagBinding(source_tag="metrics.active_power_kw", target_metric="active_power_kw", scale_factor=1.0, unit="kW"),
-                TagBinding(source_tag="metrics.power_factor", target_metric="power_factor", scale_factor=1.0, unit="pf"),
-                TagBinding(source_tag="metrics.temp_c", target_metric="temp_c", scale_factor=1.0, unit="C"),
+                TagBinding(
+                    source_tag="metrics.active_power_kw",
+                    target_metric="active_power_kw",
+                    scale_factor=1.0,
+                    unit="kW",
+                ),
+                TagBinding(
+                    source_tag="metrics.power_factor",
+                    target_metric="power_factor",
+                    scale_factor=1.0,
+                    unit="pf",
+                ),
+                TagBinding(
+                    source_tag="metrics.temp_c", target_metric="temp_c", scale_factor=1.0, unit="C"
+                ),
             ],
         )
         raw_http = poll_connection(http_conn, timeout_sec=2.0)

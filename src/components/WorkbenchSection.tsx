@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
+  Activity,
   AlertTriangle,
   Check,
   Code2,
@@ -14,6 +15,8 @@ import {
   Play,
   RotateCw,
   Search,
+  ShieldAlert,
+  ShieldCheck,
   Square,
 } from 'lucide-react';
 import { LogStreamViewer } from './LogStreamViewer';
@@ -559,15 +562,126 @@ export function WorkbenchSection({
       ? 'RustFS S3'
       : t('operations:workbench.featuresTable.storageLocal');
 
+  const pipelineHealth = useMemo(() => {
+    if (!liveRun || liveRun.totalCallsEmitted === 0) {
+      return {
+        level: 'idle' as const,
+        label: t('operations:workbench.health.idle'),
+        summary: t('operations:workbench.health.idleSummary'),
+        badgeClass: 'bg-slate-50 border-slate-300 text-slate-800',
+        dotClass: 'bg-slate-400',
+        labelClass: 'text-slate-600',
+      };
+    }
+
+    const total = Math.max(1, liveRun.totalCallsEmitted);
+    const validPct = ((liveRun.validEventsCount / total) * 100).toFixed(1);
+    const quarantineRatePct = (liveRun.quarantinedCount / total) * 100;
+    const quarantinePct = quarantineRatePct.toFixed(1);
+    const totalWindows = liveRun.featureRowsCount;
+    const anomalousWindows = liveRun.anomalousWindowsCount;
+    const anomalyRatePct = totalWindows > 0 ? (anomalousWindows / totalWindows) * 100 : 0;
+
+    const recentSlice = liveRun.recentLogs.slice(0, 25);
+    const recentFaultCount = recentSlice.filter((e) => e.level === 'ERROR').length;
+    const recentFaultRatePct =
+      recentSlice.length > 0 ? (recentFaultCount / recentSlice.length) * 100 : 0;
+
+    const metricsSummary = t('operations:workbench.health.metricsSummary', {
+      validPct,
+      quarantinePct,
+      anomalous: anomalousWindows,
+      totalWin: totalWindows,
+    });
+
+    const isCritical =
+      quarantineRatePct >= 14 ||
+      recentFaultRatePct >= 18 ||
+      (totalWindows >= 4 && anomalyRatePct >= 80 && recentFaultRatePct >= 10);
+
+    if (isCritical) {
+      return {
+        level: 'critical' as const,
+        label: t('operations:workbench.health.critical'),
+        summary: metricsSummary,
+        badgeClass: 'bg-red-50 border-red-300 text-red-900',
+        dotClass: 'bg-red-600',
+        labelClass: 'text-red-700',
+      };
+    }
+
+    const isDegraded =
+      quarantineRatePct >= 9 ||
+      recentFaultRatePct >= 8 ||
+      liveRun.status === 'paused' ||
+      (totalWindows >= 2 && anomalyRatePct >= 50 && recentFaultRatePct >= 5);
+
+    if (isDegraded) {
+      return {
+        level: 'degraded' as const,
+        label: t('operations:workbench.health.degraded'),
+        summary:
+          liveRun.status === 'paused'
+            ? t('operations:workbench.health.pausedSummary', { validPct })
+            : metricsSummary,
+        badgeClass: 'bg-amber-50 border-amber-300 text-amber-900',
+        dotClass: 'bg-amber-500',
+        labelClass: 'text-amber-700',
+      };
+    }
+
+    return {
+      level: 'stable' as const,
+      label: t('operations:workbench.health.stable'),
+      summary: metricsSummary,
+      badgeClass: 'bg-emerald-50 border-emerald-300 text-emerald-900',
+      dotClass: 'bg-emerald-600',
+      labelClass: 'text-emerald-700',
+    };
+  }, [liveRun, t]);
+
   return (
     <div className="space-y-5">
       {/* Compact ERP Simulation Control Panel */}
       <section className="bg-white border border-hairline rounded-[2px]">
         <div className="px-5 py-4 border-b border-hairline flex flex-col xl:flex-row xl:items-center justify-between gap-4">
-          <div>
-            <h1 className="text-[15px] font-semibold tracking-tight text-ink">
-              {t('operations:workbench.title')}
-            </h1>
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2.5">
+              <h1 className="text-[15px] font-semibold tracking-tight text-ink">
+                {t('operations:workbench.title')}
+              </h1>
+              <div
+                role="status"
+                aria-live="polite"
+                data-testid="pipeline-health-badge"
+                data-health-level={pipelineHealth.level}
+                title={`${t('operations:workbench.health.label')}: ${pipelineHealth.label} — ${pipelineHealth.summary}`}
+                className={`inline-flex items-center gap-2 px-2.5 py-1 border rounded-[2px] text-xs font-medium shrink-0 ${pipelineHealth.badgeClass}`}
+              >
+                <span className="inline-flex items-center gap-1.5">
+                  <span
+                    aria-hidden="true"
+                    className={`w-2 h-2 rounded-[1px] shrink-0 ${pipelineHealth.dotClass}`}
+                  />
+                  {pipelineHealth.level === 'critical' ? (
+                    <ShieldAlert className="w-3.5 h-3.5 shrink-0" />
+                  ) : pipelineHealth.level === 'degraded' ? (
+                    <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+                  ) : pipelineHealth.level === 'stable' ? (
+                    <ShieldCheck className="w-3.5 h-3.5 shrink-0" />
+                  ) : (
+                    <Activity className="w-3.5 h-3.5 shrink-0" />
+                  )}
+                  <span className={`text-[10px] font-mono uppercase tracking-[0.06em] ${pipelineHealth.labelClass}`}>
+                    {t('operations:workbench.health.label')}
+                  </span>
+                  <span className="font-semibold tracking-tight">{pipelineHealth.label}</span>
+                </span>
+                <span className="hidden sm:inline text-[11px] font-mono opacity-80 border-l border-current/20 pl-2">
+                  {pipelineHealth.summary}
+                </span>
+              </div>
+            </div>
             <p className="text-xs text-slate-600 mt-0.5">
               {t('operations:workbench.subtitlePrefix')}{' '}
               <button

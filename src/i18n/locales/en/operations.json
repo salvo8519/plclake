@@ -62,6 +62,16 @@
       "runMeta": "Run {{runId}} · {{speed}}x speed · Contract {{sampleSec}}s/machine",
       "clockMeta": "Sim Clock {{elapsed}} / {{target}} · Wall {{wall}}s · {{pct}}%"
     },
+    "health": {
+      "label": "Pipeline Health",
+      "stable": "Stable",
+      "degraded": "Degraded",
+      "critical": "Critical",
+      "idle": "Standby",
+      "idleSummary": "Awaiting telemetry stream",
+      "pausedSummary": "Paused · {{validPct}}% valid",
+      "metricsSummary": "{{validPct}}% valid · {{quarantinePct}}% quarantine · {{anomalous}}/{{totalWin}} anomalous win"
+    },
     "kpi": {
       "callsProduced": "Calls Produced",
       "validEvents": "Valid Events",

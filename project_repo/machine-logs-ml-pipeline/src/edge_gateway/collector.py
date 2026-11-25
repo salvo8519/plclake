@@ -5,15 +5,21 @@ import json
 import os
 import socket
 import sqlite3
-import threading
 import time
 import urllib.error
 import urllib.request
 import uuid
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
+
+from edge_gateway.drivers import (
+    MqttSubscriptionBuffer,
+    poll_http_rest_meter,
+    poll_modbus_tcp,
+    poll_opcua,
+)
 
 DOMAIN_BY_MACHINE_TYPE: dict[str, str] = {
     "plc-controller": "manufacturing",
@@ -60,7 +66,7 @@ def normalize_raw_sample(
     ts: datetime | None = None,
 ) -> dict[str, Any]:
     """Map PLC registers/OPC-UA nodes/JSON fields into Common Telemetry Envelope v2."""
-    event_time = ts or datetime.now(timezone.utc)
+    event_time = ts or datetime.now(UTC)
     metrics: dict[str, float] = {}
     for binding in conn.tag_bindings:
         if binding.source_tag in raw_readings and raw_readings[binding.source_tag] is not None:
@@ -71,7 +77,11 @@ def normalize_raw_sample(
         metrics["temp_c"] = round(float(raw_readings["temp_c"]), 2)
 
     normalized_state = state.upper()
-    level = "ERROR" if normalized_state == "FAULT" else ("WARN" if normalized_state == "DEGRADED" else "INFO")
+    level = (
+        "ERROR"
+        if normalized_state == "FAULT"
+        else ("WARN" if normalized_state == "DEGRADED" else "INFO")
+    )
     domain = conn.domain or DOMAIN_BY_MACHINE_TYPE.get(conn.machine_type, "manufacturing")
 
     return {
@@ -150,8 +160,10 @@ class EdgeConfigSyncClient:
         headers = {"Accept": "application/json"}
         if self.token:
             headers["Authorization"] = f"Bearer {self.token}"
-        req = urllib.request.Request(self.config_url, headers=headers, method="GET")
-        with urllib.request.urlopen(req, timeout=self.timeout_sec) as resp:
+        if not self.config_url.startswith(("http://", "https://")):
+            raise ValueError(f"Unsupported config URL scheme: {self.config_url}")
+        req = urllib.request.Request(self.config_url, headers=headers, method="GET")  # noqa: S310
+        with urllib.request.urlopen(req, timeout=self.timeout_sec) as resp:  # noqa: S310
             raw = json.loads(resp.read().decode("utf-8"))
 
         new_hash = str(raw.get("config_hash", ""))
@@ -209,10 +221,9 @@ class SpoolStore:
         if self.db_path.exists() and self.db_path.stat().st_size > self.max_bytes:
             self._evict_oldest(limit=max(100, len(events)))
 
-        now_iso = datetime.now(timezone.utc).isoformat()
+        now_iso = datetime.now(UTC).isoformat()
         rows = [
-            (str(ev["event_id"]), json.dumps(ev, separators=(",", ":")), now_iso)
-            for ev in events
+            (str(ev["event_id"]), json.dumps(ev, separators=(",", ":")), now_iso) for ev in events
         ]
         with self._connect() as con:
             con.executemany(
@@ -243,7 +254,7 @@ class SpoolStore:
             return
         placeholders = ",".join("?" for _ in seqs)
         with self._connect() as con:
-            con.execute(f"DELETE FROM spooled_events WHERE seq IN ({placeholders});", seqs)
+            con.execute(f"DELETE FROM spooled_events WHERE seq IN ({placeholders});", seqs)  # noqa: S608
             con.commit()
 
 
@@ -261,8 +272,10 @@ class HttpBatchSink:
         if self.token:
             headers["Authorization"] = f"Bearer {self.token}"
 
-        req = urllib.request.Request(self.ingest_url, data=body, headers=headers, method="POST")
-        with urllib.request.urlopen(req, timeout=self.timeout_sec) as resp:
+        if not self.ingest_url.startswith(("http://", "https://")):
+            raise ValueError(f"Unsupported ingest URL scheme: {self.ingest_url}")
+        req = urllib.request.Request(self.ingest_url, data=body, headers=headers, method="POST")  # noqa: S310
+        with urllib.request.urlopen(req, timeout=self.timeout_sec) as resp:  # noqa: S310
             raw = resp.read().decode("utf-8")
             return json.loads(raw) if raw else {"accepted": len(events)}
 
@@ -290,19 +303,12 @@ class LocalSegmentSink:
             line_count = sum(1 for _ in lf)
         if line_count >= self.rotate_max_lines:
             self._seq += 1
-            stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+            stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
             rotated = self.segments_dir / f"telemetry.{stamp}.{self._seq:04d}.jsonl"
             self.log_path.replace(rotated)
             self.log_path.touch()
         return {"accepted": len(events)}
 
-
-from edge_gateway.drivers import (
-    MqttSubscriptionBuffer,
-    poll_http_rest_meter,
-    poll_modbus_tcp,
-    poll_opcua,
-)
 
 _MQTT_BUFFER = MqttSubscriptionBuffer()
 
@@ -398,7 +404,12 @@ class EdgeCollector:
                 return True
         except (urllib.error.URLError, TimeoutError, OSError, ValueError) as exc:
             print(
-                json.dumps({"level": "WARN", "message": f"Config auto-sync skipped (keeping active list): {exc}"}),
+                json.dumps(
+                    {
+                        "level": "WARN",
+                        "message": f"Config auto-sync skipped (keeping active list): {exc}",
+                    }
+                ),
                 flush=True,
             )
         return False
@@ -428,7 +439,11 @@ class EdgeCollector:
                     flush=True,
                 )
                 break
-        return {"flushed": flushed, "failed_batches": failed_batches, "remaining_spool": self.spool.count()}
+        return {
+            "flushed": flushed,
+            "failed_batches": failed_batches,
+            "remaining_spool": self.spool.count(),
+        }
 
     def run_once(self, force_sync: bool = False) -> dict[str, Any]:
         config_reloaded = self.sync_config_if_due(force=force_sync)
@@ -454,14 +469,29 @@ class EdgeCollector:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="On-Premise Industrial Edge Gateway Collector (Plug & Play)")
+    parser = argparse.ArgumentParser(
+        description="On-Premise Industrial Edge Gateway Collector (Plug & Play)"
+    )
     parser.add_argument("--config", type=Path, default=Path("/etc/edge-gateway/connections.json"))
     parser.add_argument("--config-url", type=str, default=os.getenv("EDGE_CONFIG_URL", ""))
-    parser.add_argument("--config-sync-sec", type=float, default=float(os.getenv("EDGE_CONFIG_SYNC_SEC", "30")))
-    parser.add_argument("--config-cache", type=Path, default=Path("/var/spool/edge-gateway/connections.cache.json"))
-    parser.add_argument("--spool-db", type=Path, default=Path(os.getenv("EDGE_SPOOL_DB", "/var/spool/edge-gateway/spool.db")))
+    parser.add_argument(
+        "--config-sync-sec", type=float, default=float(os.getenv("EDGE_CONFIG_SYNC_SEC", "30"))
+    )
+    parser.add_argument(
+        "--config-cache", type=Path, default=Path("/var/spool/edge-gateway/connections.cache.json")
+    )
+    parser.add_argument(
+        "--spool-db",
+        type=Path,
+        default=Path(os.getenv("EDGE_SPOOL_DB", "/var/spool/edge-gateway/spool.db")),
+    )
     parser.add_argument("--ingest-url", type=str, default=os.getenv("EDGE_INGEST_URL", ""))
-    parser.add_argument("--local-out-dir", type=Path, default=None, help="Write JSONL segments locally instead of HTTP push")
+    parser.add_argument(
+        "--local-out-dir",
+        type=Path,
+        default=None,
+        help="Write JSONL segments locally instead of HTTP push",
+    )
     parser.add_argument("--interval-sec", type=float, default=5.0)
     parser.add_argument("--once", action="store_true")
     args = parser.parse_args()
@@ -480,11 +510,15 @@ def main() -> None:
         else None
     )
 
-    spool = SpoolStore(args.spool_db, max_mb=int(meta.get("spool_max_mb", os.getenv("EDGE_SPOOL_MAX_MB", "1024"))))
+    spool = SpoolStore(
+        args.spool_db, max_mb=int(meta.get("spool_max_mb", os.getenv("EDGE_SPOOL_MAX_MB", "1024")))
+    )
     if args.local_out_dir is not None:
         sink: HttpBatchSink | LocalSegmentSink = LocalSegmentSink(args.local_out_dir)
     else:
-        target_url = args.ingest_url or str(meta.get("ingest_api_url", "http://localhost:3000/api/v1/ingest/batch"))
+        target_url = args.ingest_url or str(
+            meta.get("ingest_api_url", "http://localhost:3000/api/v1/ingest/batch")
+        )
         sink = HttpBatchSink(ingest_url=target_url, token=token)
 
     collector = EdgeCollector(

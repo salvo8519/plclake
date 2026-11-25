@@ -118,21 +118,17 @@ function encodeShieldSegment(value: string): string {
   return encodeURIComponent(value.replace(/-/g, '--').replace(/_/g, '__'));
 }
 
-function makeBadge(label: string, message: string, color: string, logo?: string): string {
+function makeBadge(label: string, message: string, color: string): string {
   const pathPart = `${encodeShieldSegment(label)}-${encodeShieldSegment(message)}-${color}`;
   const params = new URLSearchParams({
     style: 'flat-square',
     labelColor: NAVY,
   });
-  if (logo) {
-    params.set('logo', logo);
-    params.set('logoColor', 'FFFFFF');
-  }
   return `https://img.shields.io/badge/${pathPart}?${params.toString()}`;
 }
 
-function makeBadgeImg(alt: string, label: string, message: string, color: string, logo?: string): string {
-  const url = makeBadge(label, message, color, logo);
+function makeBadgeImg(alt: string, label: string, message: string, color: string): string {
+  const url = makeBadge(label, message, color);
   return `<img src="${url}" alt="${alt}" />`;
 }
 
@@ -141,16 +137,16 @@ export function buildBadgesBlock(lang: SupportedLanguage, metrics: CodeMetrics =
 
   const row1 = [
     makeBadgeImg('Release', isIt ? 'Versione' : 'Release', `v${metrics.appVersion}`, GOLD),
-    makeBadgeImg('OpenAPI', 'OpenAPI', `${metrics.openapiVersion} · ${metrics.endpointCount} endpoints`, NAVY_MID, 'openapiinitiative'),
-    makeBadgeImg('i18n', 'i18n', `EN | IT · ${metrics.i18nKeyCount} ${isIt ? 'chiavi' : 'keys'}`, GOLD, 'i18next'),
+    makeBadgeImg('OpenAPI', 'OpenAPI', `${metrics.openapiVersion} · ${metrics.endpointCount} endpoints`, NAVY_MID),
+    makeBadgeImg('i18n', 'i18n', `EN | IT · ${metrics.i18nKeyCount} ${isIt ? 'chiavi' : 'keys'}`, GOLD),
     makeBadgeImg('Docs', isIt ? 'Docs Zensical' : 'Zensical Docs', `${metrics.bilingualDocPages}×2 ${isIt ? 'pagine EN/IT' : 'EN/IT pages'}`, NAVY_MID),
-    makeBadgeImg('CI Gate', isIt ? 'Gate CI' : 'CI Gate', metrics.hasCiWorkflow && metrics.hasDocsWorkflow ? 'ESLint · Biome · Ruff · Vitest' : 'Local', EMERALD, 'githubactions'),
+    makeBadgeImg('CI Gate', isIt ? 'Gate CI' : 'CI Gate', metrics.hasCiWorkflow && metrics.hasDocsWorkflow ? 'ESLint · Biome · Ruff · Vitest' : 'Local', EMERALD),
   ];
 
   const row2 = [
-    makeBadgeImg('React', 'React', metrics.reactVersion, NAVY_MID, 'react'),
-    makeBadgeImg('TypeScript', 'TypeScript', metrics.typescriptVersion, NAVY_MID, 'typescript'),
-    makeBadgeImg('Express', 'Express', metrics.expressVersion, NAVY_MID, 'express'),
+    makeBadgeImg('React', 'React', metrics.reactVersion, NAVY_MID),
+    makeBadgeImg('TypeScript', 'TypeScript', metrics.typescriptVersion, NAVY_MID),
+    makeBadgeImg('Express', 'Express', metrics.expressVersion, NAVY_MID),
     makeBadgeImg('i18next', 'i18next', metrics.i18nextVersion, GOLD),
     makeBadgeImg('Security', isIt ? 'Sicurezza' : 'Security', 'RBAC · AES-256-GCM · scrypt', EMERALD),
   ];

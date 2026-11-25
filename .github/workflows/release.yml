@@ -3,6 +3,11 @@ name: Release — Immutable Docker Image, Staging & Production Promotion
 on:
   push:
     branches: ["main"]
+    paths-ignore:
+      - "README.md"
+      - "README.it.md"
+      - "docs/**"
+      - "*.md"
     tags: ["v*.*.*"]
   workflow_dispatch:
     inputs:
@@ -14,6 +19,10 @@ on:
         options:
           - staging
           - production
+
+concurrency:
+  group: "release-${{ github.ref }}"
+  cancel-in-progress: true
 
 permissions:
   contents: read
@@ -40,10 +49,20 @@ jobs:
           OWNER_LOWER=$(echo "${GITHUB_REPOSITORY_OWNER}" | tr '[:upper:]' '[:lower:]')
           IMAGE_REPO="ghcr.io/${OWNER_LOWER}/plclake"
           IMMUTABLE_TAG="${APP_VERSION}-${SHORT_SHA}"
+          TAGS="${IMAGE_REPO}:${IMMUTABLE_TAG}"
+          if [ "${GITHUB_REF}" = "refs/heads/main" ]; then
+            TAGS="${TAGS},${IMAGE_REPO}:staging"
+          fi
+          case "${GITHUB_REF}" in
+            refs/tags/v*)
+              TAGS="${TAGS},${IMAGE_REPO}:${APP_VERSION},${IMAGE_REPO}:latest"
+              ;;
+          esac
           echo "version=${APP_VERSION}" >> "$GITHUB_OUTPUT"
           echo "short_sha=${SHORT_SHA}" >> "$GITHUB_OUTPUT"
           echo "image_ref=${IMAGE_REPO}" >> "$GITHUB_OUTPUT"
           echo "immutable_tag=${IMMUTABLE_TAG}" >> "$GITHUB_OUTPUT"
+          echo "tags=${TAGS}" >> "$GITHUB_OUTPUT"
           echo "build_time=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
 
       - name: Log in to GitHub Container Registry (GHCR)
@@ -65,11 +84,7 @@ jobs:
           build-args: |
             APP_BUILD_SHA=${{ github.sha }}
             APP_BUILD_TIME=${{ steps.meta.outputs.build_time }}
-          tags: |
-            ${{ steps.meta.outputs.image_ref }}:${{ steps.meta.outputs.immutable_tag }}
-            ${{ github.ref == 'refs/heads/main' && format('{0}:staging', steps.meta.outputs.image_ref) || '' }}
-            ${{ startsWith(github.ref, 'refs/tags/v') && format('{0}:{1}', steps.meta.outputs.image_ref, steps.meta.outputs.version) || '' }}
-            ${{ startsWith(github.ref, 'refs/tags/v') && format('{0}:latest', steps.meta.outputs.image_ref) || '' }}
+          tags: ${{ steps.meta.outputs.tags }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -84,34 +99,41 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Deploy Staging via Helm (when KUBECONFIG_STAGING is configured)
-        if: ${{ secrets.KUBECONFIG_STAGING != '' }}
         env:
           KUBECONFIG_B64: ${{ secrets.KUBECONFIG_STAGING }}
+          IMAGE_REF: ${{ needs.build-and-push.outputs.image_ref }}
+          IMMUTABLE_TAG: ${{ needs.build-and-push.outputs.immutable_tag }}
         run: |
+          if [ -z "${KUBECONFIG_B64:-}" ]; then
+            echo "Image published: ${IMAGE_REF}:${IMMUTABLE_TAG}"
+            echo "Add KUBECONFIG_STAGING secret and STAGING_BASE_URL variable in GitHub Environment 'staging' to activate auto-deploy."
+            exit 0
+          fi
           mkdir -p "$HOME/.kube"
           echo "$KUBECONFIG_B64" | base64 -d > "$HOME/.kube/config"
           chmod 600 "$HOME/.kube/config"
           helm upgrade --install plclake ./deploy/helm/plclake \
             -n plclake-staging --create-namespace \
             -f ./deploy/helm/plclake/values-staging.yaml \
-            --set image.repository="${{ needs.build-and-push.outputs.image_ref }}" \
-            --set image.tag="${{ needs.build-and-push.outputs.immutable_tag }}" \
+            --set image.repository="${IMAGE_REF}" \
+            --set image.tag="${IMMUTABLE_TAG}" \
             --wait --timeout 3m
 
       - name: Post-deploy Staging smoke test (/readyz & /api/v1/version)
-        if: ${{ vars.STAGING_BASE_URL != '' }}
+        env:
+          STAGING_BASE_URL: ${{ vars.STAGING_BASE_URL }}
+          EXPECTED_VERSION: ${{ needs.build-and-push.outputs.version }}
+          EXPECTED_SHA: ${{ github.sha }}
         run: |
-          curl -fsS "${{ vars.STAGING_BASE_URL }}/readyz"
-          VER_JSON=$(curl -fsS "${{ vars.STAGING_BASE_URL }}/api/v1/version")
+          if [ -z "${STAGING_BASE_URL:-}" ]; then
+            echo "STAGING_BASE_URL not configured — skipping smoke test."
+            exit 0
+          fi
+          curl -fsS "${STAGING_BASE_URL}/readyz"
+          VER_JSON=$(curl -fsS "${STAGING_BASE_URL}/api/v1/version")
           echo "Staging version payload: ${VER_JSON}"
-          echo "${VER_JSON}" | grep -q '"version":"${{ needs.build-and-push.outputs.version }}"'
-          echo "${VER_JSON}" | grep -q '"buildSha":"${{ github.sha }}"'
-
-      - name: Notice when Staging target is not yet connected
-        if: ${{ secrets.KUBECONFIG_STAGING == '' }}
-        run: |
-          echo "Image published: ${{ needs.build-and-push.outputs.image_ref }}:${{ needs.build-and-push.outputs.immutable_tag }}"
-          echo "Add KUBECONFIG_STAGING secret and STAGING_BASE_URL variable in GitHub Environment 'staging' to activate auto-deploy."
+          echo "${VER_JSON}" | grep -q "\"version\":\"${EXPECTED_VERSION}\""
+          echo "${VER_JSON}" | grep -q "\"buildSha\":\"${EXPECTED_SHA}\""
 
   deploy-production:
     name: Promote Immutable Image to Production
@@ -124,31 +146,39 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Deploy Production via Helm (when KUBECONFIG_PROD is configured)
-        if: ${{ secrets.KUBECONFIG_PROD != '' }}
         env:
           KUBECONFIG_B64: ${{ secrets.KUBECONFIG_PROD }}
+          IMAGE_REF: ${{ needs.build-and-push.outputs.image_ref }}
+          IMMUTABLE_TAG: ${{ needs.build-and-push.outputs.immutable_tag }}
+          APP_VERSION: ${{ needs.build-and-push.outputs.version }}
         run: |
+          if [ -z "${KUBECONFIG_B64:-}" ]; then
+            echo "Production release image published: ${IMAGE_REF}:${APP_VERSION}"
+            echo "Add KUBECONFIG_PROD secret and PROD_BASE_URL variable in GitHub Environment 'production' to activate auto-promotion."
+            exit 0
+          fi
           mkdir -p "$HOME/.kube"
           echo "$KUBECONFIG_B64" | base64 -d > "$HOME/.kube/config"
           chmod 600 "$HOME/.kube/config"
           helm upgrade --install plclake ./deploy/helm/plclake \
             -n plclake-prod --create-namespace \
             -f ./deploy/helm/plclake/values-prod.yaml \
-            --set image.repository="${{ needs.build-and-push.outputs.image_ref }}" \
-            --set image.tag="${{ needs.build-and-push.outputs.immutable_tag }}" \
+            --set image.repository="${IMAGE_REF}" \
+            --set image.tag="${IMMUTABLE_TAG}" \
             --wait --timeout 4m
 
       - name: Post-deploy Production smoke test (/readyz & /api/v1/version)
-        if: ${{ vars.PROD_BASE_URL != '' }}
+        env:
+          PROD_BASE_URL: ${{ vars.PROD_BASE_URL }}
+          EXPECTED_VERSION: ${{ needs.build-and-push.outputs.version }}
+          EXPECTED_SHA: ${{ github.sha }}
         run: |
-          curl -fsS "${{ vars.PROD_BASE_URL }}/readyz"
-          VER_JSON=$(curl -fsS "${{ vars.PROD_BASE_URL }}/api/v1/version")
+          if [ -z "${PROD_BASE_URL:-}" ]; then
+            echo "PROD_BASE_URL not configured — skipping smoke test."
+            exit 0
+          fi
+          curl -fsS "${PROD_BASE_URL}/readyz"
+          VER_JSON=$(curl -fsS "${PROD_BASE_URL}/api/v1/version")
           echo "Production version payload: ${VER_JSON}"
-          echo "${VER_JSON}" | grep -q '"version":"${{ needs.build-and-push.outputs.version }}"'
-          echo "${VER_JSON}" | grep -q '"buildSha":"${{ github.sha }}"'
-
-      - name: Notice when Production target is not yet connected
-        if: ${{ secrets.KUBECONFIG_PROD == '' }}
-        run: |
-          echo "Production release image published: ${{ needs.build-and-push.outputs.image_ref }}:${{ needs.build-and-push.outputs.version }}"
-          echo "Add KUBECONFIG_PROD secret and PROD_BASE_URL variable in GitHub Environment 'production' to activate auto-promotion."
+          echo "${VER_JSON}" | grep -q "\"version\":\"${EXPECTED_VERSION}\""
+          echo "${VER_JSON}" | grep -q "\"buildSha\":\"${EXPECTED_SHA}\""

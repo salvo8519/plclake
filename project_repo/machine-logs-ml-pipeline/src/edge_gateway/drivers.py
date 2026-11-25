@@ -13,6 +13,7 @@ Supported protocols:
   - http-rest-meter: Supports HTTP/HTTPS GET with optional Bearer token auth and
     nested JSON dot-path extraction.
 """
+
 from __future__ import annotations
 
 import json
@@ -94,7 +95,9 @@ def decode_modbus_registers(registers: list[int], data_type: str) -> float | int
     if data_type == "bool":
         return 1 if r0 else 0
     if len(registers) < 2:
-        raise ValueError(f"Data type '{data_type}' requires 2 Modbus registers, got {len(registers)}")
+        raise ValueError(
+            f"Data type '{data_type}' requires 2 Modbus registers, got {len(registers)}"
+        )
     r1 = registers[1] & 0xFFFF
     if data_type == "uint32":
         return struct.unpack(">I", struct.pack(">HH", r0, r1))[0]
@@ -166,7 +169,9 @@ class NativeModbusTcpClient:
     deterministic wire-level testing in CI without binary wheels.
     """
 
-    def __init__(self, host: str, port: int = 502, timeout_sec: float = 2.5, unit_id: int = 1) -> None:
+    def __init__(
+        self, host: str, port: int = 502, timeout_sec: float = 2.5, unit_id: int = 1
+    ) -> None:
         self.host = host
         self.port = port
         self.timeout_sec = timeout_sec
@@ -174,7 +179,7 @@ class NativeModbusTcpClient:
         self._sock: socket.socket | None = None
         self._tx_id = 0
 
-    def __enter__(self) -> "NativeModbusTcpClient":
+    def __enter__(self) -> NativeModbusTcpClient:
         self._sock = socket.create_connection((self.host, self.port), timeout=self.timeout_sec)
         self._sock.settimeout(self.timeout_sec)
         return self
@@ -187,7 +192,8 @@ class NativeModbusTcpClient:
                 self._sock = None
 
     def _recv_exact(self, n: int) -> bytes:
-        assert self._sock is not None
+        if self._sock is None:
+            raise ConnectionError("Modbus TCP socket is not connected")
         chunks: list[bytes] = []
         remaining = n
         while remaining > 0:
@@ -199,7 +205,8 @@ class NativeModbusTcpClient:
         return b"".join(chunks)
 
     def _transact(self, function_code: int, address: int, count: int) -> bytes:
-        assert self._sock is not None
+        if self._sock is None:
+            raise ConnectionError("Modbus TCP socket is not connected")
         self._tx_id = (self._tx_id + 1) & 0xFFFF
         pdu = struct.pack(">BHH", function_code, address, count)
         mbap = struct.pack(">HHHB", self._tx_id, 0, len(pdu) + 1, self.unit_id)
@@ -272,21 +279,29 @@ def poll_modbus_tcp(
                         res = client.read_coils(address=parsed.address, count=1, slave=unit_id)
                 else:
                     try:
-                        res = client.read_discrete_inputs(address=parsed.address, count=1, device_id=unit_id)
+                        res = client.read_discrete_inputs(
+                            address=parsed.address, count=1, device_id=unit_id
+                        )
                     except TypeError:
-                        res = client.read_discrete_inputs(address=parsed.address, count=1, slave=unit_id)
+                        res = client.read_discrete_inputs(
+                            address=parsed.address, count=1, slave=unit_id
+                        )
 
                 if res.isError():
                     raise RuntimeError(f"Modbus read error at {raw_tag}: {res}")
                 if parsed.area in ("COIL", "DI"):
                     readings[raw_tag] = 1 if res.bits[0] else 0
                 else:
-                    readings[raw_tag] = decode_modbus_registers(list(res.registers), parsed.data_type)
+                    readings[raw_tag] = decode_modbus_registers(
+                        list(res.registers), parsed.data_type
+                    )
             return readings
         finally:
             client.close()
     except ImportError:
-        with NativeModbusTcpClient(host=host, port=port, timeout_sec=timeout_sec, unit_id=unit_id) as native:
+        with NativeModbusTcpClient(
+            host=host, port=port, timeout_sec=timeout_sec, unit_id=unit_id
+        ) as native:
             return {raw_tag: native.read_tag(parsed) for raw_tag, parsed in parsed_tags}
 
 
@@ -358,8 +373,8 @@ def poll_http_rest_meter(
         if meter_token:
             headers["Authorization"] = f"Bearer {meter_token}"
 
-    req = urllib.request.Request(url, headers=headers, method="GET")
-    with urllib.request.urlopen(req, timeout=timeout_sec) as resp:
+    req = urllib.request.Request(url, headers=headers, method="GET")  # noqa: S310
+    with urllib.request.urlopen(req, timeout=timeout_sec) as resp:  # noqa: S310
         payload = json.loads(resp.read().decode("utf-8"))
 
     if not isinstance(payload, dict):
@@ -388,7 +403,9 @@ class MqttSubscriptionBuffer:
         self._latest_by_conn: dict[str, dict[str, Any]] = {}
         self._started_ids: set[str] = set()
 
-    def ingest_payload(self, conn_id: str, payload: dict[str, Any], tag_bindings: list[Any]) -> dict[str, Any]:
+    def ingest_payload(
+        self, conn_id: str, payload: dict[str, Any], tag_bindings: list[Any]
+    ) -> dict[str, Any]:
         """Normalize an incoming MQTT JSON or Sparkplug B payload into tag-keyed readings."""
         readings: dict[str, Any] = {}
         for binding in tag_bindings:
@@ -422,7 +439,9 @@ class MqttSubscriptionBuffer:
             ca_certs = os.getenv("EDGE_MQTT_CA_CERT", "").strip() or None
             client.tls_set(ca_certs=ca_certs, tls_version=ssl.PROTOCOL_TLS_CLIENT)
 
-        def on_connect(cli: Any, _userdata: Any, _flags: Any, reason_code: Any, _props: Any) -> None:
+        def on_connect(
+            cli: Any, _userdata: Any, _flags: Any, reason_code: Any, _props: Any
+        ) -> None:
             if reason_code == 0:
                 cli.subscribe(conn.endpoint_or_topic)
 

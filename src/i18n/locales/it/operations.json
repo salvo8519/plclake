@@ -62,6 +62,16 @@
       "runMeta": "Run {{runId}} · velocità {{speed}}x · Contratto {{sampleSec}}s/macchina",
       "clockMeta": "Clock Sim {{elapsed}} / {{target}} · Reale {{wall}}s · {{pct}}%"
     },
+    "health": {
+      "label": "Salute Pipeline",
+      "stable": "Stabile",
+      "degraded": "Degradata",
+      "critical": "Critica",
+      "idle": "In Attesa",
+      "idleSummary": "In attesa del flusso telemetrico",
+      "pausedSummary": "In pausa · {{validPct}}% validi",
+      "metricsSummary": "{{validPct}}% validi · {{quarantinePct}}% quarantena · {{anomalous}}/{{totalWin}} fin. anomale"
+    },
     "kpi": {
       "callsProduced": "Chiamate Prodotte",
       "validEvents": "Eventi Validi",

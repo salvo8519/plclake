@@ -8,7 +8,7 @@ import os
 import time
 import uuid
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -137,7 +137,7 @@ class BuilderCheckpoint:
 
 
 def _payload_hash(reason: str, raw_line: str) -> str:
-    return hashlib.sha256(f"{reason}:{raw_line}".encode("utf-8")).hexdigest()[:16]
+    return hashlib.sha256(f"{reason}:{raw_line}".encode()).hexdigest()[:16]
 
 
 def load_checkpoint(checkpoint_path: Path | None) -> BuilderCheckpoint:
@@ -171,7 +171,7 @@ def save_checkpoint(checkpoint_path: Path | None, ckpt: BuilderCheckpoint) -> No
                 "active_offset": ckpt.active_offset,
                 "active_inode": ckpt.active_inode,
                 "high_watermark_ts": ckpt.high_watermark_ts,
-                "updated_at": datetime.now(timezone.utc).isoformat(),
+                "updated_at": datetime.now(UTC).isoformat(),
             },
             indent=2,
         ),
@@ -222,14 +222,14 @@ def validate_and_load_events(
                 continue
             total_raw_lines += 1
 
-            def add_quarantine(reason: str) -> None:
+            def add_quarantine(reason: str, raw_line: str = stripped) -> None:
                 quarantine_records.append(
                     {
-                        "quarantine_id": _payload_hash(reason, stripped),
-                        "quarantined_at": datetime.now(timezone.utc).isoformat(),
+                        "quarantine_id": _payload_hash(reason, raw_line),
+                        "quarantined_at": datetime.now(UTC).isoformat(),
                         "source": "dataset_builder",
                         "error_reason": reason,
-                        "raw_payload": stripped,
+                        "raw_payload": raw_line,
                     }
                 )
 
@@ -449,14 +449,15 @@ def merge_and_prune_event_store(
                 SELECT * FROM read_parquet('{staging_parquet}')
                 UNION ALL BY NAME
                 SELECT * FROM incoming_events
-            """
+            """  # noqa: S608
         elif has_existing:
-            source_sql = f"SELECT * FROM read_parquet('{staging_parquet}')"
+            source_sql = f"SELECT * FROM read_parquet('{staging_parquet}')"  # noqa: S608
         else:
             con.register("incoming_events", new_df)
             source_sql = "SELECT * FROM incoming_events"
 
-        con.execute(f"""
+        con.execute(
+            f"""
             CREATE TEMP TABLE deduped_events AS
             SELECT * EXCLUDE (rn) FROM (
                 SELECT *, ROW_NUMBER() OVER (
@@ -466,9 +467,11 @@ def merge_and_prune_event_store(
                 FROM ({source_sql})
             )
             WHERE rn = 1;
-        """)
+        """  # noqa: S608
+        )
 
-        con.execute(f"""
+        con.execute(
+            f"""
             COPY (
                 WITH max_ref AS (SELECT MAX(timestamp) AS max_ts FROM deduped_events)
                 SELECT d.*
@@ -476,18 +479,19 @@ def merge_and_prune_event_store(
                 WHERE d.timestamp >= max_ref.max_ts - INTERVAL '{int(retention_hours)} hours'
                 ORDER BY d.machine_id, d.timestamp, d.event_id
             ) TO '{tmp_staging}' (FORMAT PARQUET, COMPRESSION ZSTD);
-        """)
+        """  # noqa: S608
+        )
         tmp_staging.replace(staging_parquet)
 
         if min_affected_ts is not None:
             cutoff_iso = min_affected_ts.isoformat()
             result = con.execute(
-                f"SELECT * FROM read_parquet('{staging_parquet}') WHERE timestamp >= CAST(? AS TIMESTAMPTZ) ORDER BY machine_id, timestamp, event_id",
+                f"SELECT * FROM read_parquet('{staging_parquet}') WHERE timestamp >= CAST(? AS TIMESTAMPTZ) ORDER BY machine_id, timestamp, event_id",  # noqa: S608
                 [cutoff_iso],
             ).fetch_df()
         else:
             result = con.execute(
-                f"SELECT * FROM read_parquet('{staging_parquet}') ORDER BY machine_id, timestamp, event_id"
+                f"SELECT * FROM read_parquet('{staging_parquet}') ORDER BY machine_id, timestamp, event_id"  # noqa: S608
             ).fetch_df()
         if not result.empty:
             result["timestamp"] = pd.to_datetime(result["timestamp"], utc=True)
@@ -585,7 +589,7 @@ def _compute_state_transitions(group: pd.DataFrame) -> int:
     states = ordered["state"].tolist()
     if len(states) <= 1:
         return 0
-    return sum(1 for prev, curr in zip(states, states[1:]) if prev != curr)
+    return sum(1 for prev, curr in zip(states, states[1:], strict=False) if prev != curr)
 
 
 def build_ml_features(
@@ -613,8 +617,16 @@ def build_ml_features(
         spec = resolve_machine_spec(machine_type)
         domain = str(grp["domain"].mode().iloc[0]) if "domain" in grp.columns else spec["domain"]
 
-        primary_col = grp["primary_metric_value"] if "primary_metric_value" in grp.columns else grp["cycle_ms"]
-        secondary_col = grp["secondary_metric_value"] if "secondary_metric_value" in grp.columns else grp["vibration_mm_s"]
+        primary_col = (
+            grp["primary_metric_value"]
+            if "primary_metric_value" in grp.columns
+            else grp["cycle_ms"]
+        )
+        secondary_col = (
+            grp["secondary_metric_value"]
+            if "secondary_metric_value" in grp.columns
+            else grp["vibration_mm_s"]
+        )
 
         primary_mean = round(float(primary_col.mean()), 3)
         primary_p95 = round(float(primary_col.quantile(0.95)), 3)
@@ -706,7 +718,11 @@ def write_partitioned_parquet(
             part_dir = out_dir / f"domain={domain_val}" / f"dt={dt_val}"
             part_dir.mkdir(parents=True, exist_ok=True)
             batch_file = part_dir / f"batch-{uuid.uuid4().hex[:8]}.parquet"
-            incoming = part_df.drop(columns=["domain", "dt"]).sort_values(["machine_id", "window_start"]).copy()
+            incoming = (
+                part_df.drop(columns=["domain", "dt"])
+                .sort_values(["machine_id", "window_start"])
+                .copy()
+            )
             incoming.to_parquet(batch_file, index=False, compression=compression)
             written_files.append(batch_file)
         return written_files
@@ -757,7 +773,7 @@ def compact_parquet_partitions(out_dir: Path, compression: str = "zstd") -> list
             cols = [
                 r[0]
                 for r in con.execute(
-                    f"DESCRIBE SELECT * FROM read_parquet('{glob_pattern}', union_by_name=true)"
+                    f"DESCRIBE SELECT * FROM read_parquet('{glob_pattern}', union_by_name=true)"  # noqa: S608
                 ).fetchall()
             ]
             if "machine_id" in cols:
@@ -773,7 +789,7 @@ def compact_parquet_partitions(out_dir: Path, compression: str = "zstd") -> list
                         WHERE rn = 1
                         ORDER BY machine_id, window_start
                     ) TO '{tmp_target}' (FORMAT PARQUET, COMPRESSION '{compression.upper()}');
-                """
+                """  # noqa: S608
             else:
                 sql = f"""
                     COPY (
@@ -787,7 +803,7 @@ def compact_parquet_partitions(out_dir: Path, compression: str = "zstd") -> list
                         WHERE rn = 1
                         ORDER BY window_start
                     ) TO '{tmp_target}' (FORMAT PARQUET, COMPRESSION '{compression.upper()}');
-                """
+                """  # noqa: S608
             con.execute(sql)
             for old_file in parquet_inputs:
                 old_file.unlink(missing_ok=True)
@@ -847,7 +863,7 @@ def upload_artifacts_to_s3(
 
         if quarantine_file.exists():
             _ensure_bucket(s3_cold_client, quarantine_bucket)
-            day_prefix = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+            day_prefix = datetime.now(UTC).strftime("%Y-%m-%d")
             s3_cold_client.upload_file(
                 str(quarantine_file),
                 quarantine_bucket,
@@ -898,7 +914,9 @@ def write_to_postgres(
                     valid_events,
                     quarantined_events,
                     len(features),
-                    pd.to_datetime(high_watermark_ts, utc=True).to_pydatetime() if high_watermark_ts else None,
+                    pd.to_datetime(high_watermark_ts, utc=True).to_pydatetime()
+                    if high_watermark_ts
+                    else None,
                     dataset_version,
                     s3_prefix,
                 ),
@@ -1003,7 +1021,7 @@ def write_to_postgres(
 
 
 def run_once(args: argparse.Namespace) -> dict[str, Any]:
-    started_at = datetime.now(timezone.utc)
+    started_at = datetime.now(UTC)
     checkpoint = load_checkpoint(args.checkpoint_file)
     ingestion, next_ckpt = ingest_incremental_sources(
         log_path=args.log_file,
@@ -1068,7 +1086,7 @@ def run_once(args: argparse.Namespace) -> dict[str, Any]:
 
     save_checkpoint(args.checkpoint_file, next_ckpt)
 
-    finished_at = datetime.now(timezone.utc)
+    finished_at = datetime.now(UTC)
     if args.write_postgres:
         write_to_postgres(
             features=features,
@@ -1102,10 +1120,14 @@ def run_once(args: argparse.Namespace) -> dict[str, Any]:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Incremental watermark ML & Lakehouse dataset builder")
+    parser = argparse.ArgumentParser(
+        description="Incremental watermark ML & Lakehouse dataset builder"
+    )
     parser.add_argument("--log-file", type=Path, default=Path("/var/log/machines/telemetry.jsonl"))
     parser.add_argument("--segments-dir", type=Path, default=Path("/var/log/machines/segments"))
-    parser.add_argument("--quarantine-file", type=Path, default=Path("/var/log/machines/quarantine.jsonl"))
+    parser.add_argument(
+        "--quarantine-file", type=Path, default=Path("/var/log/machines/quarantine.jsonl")
+    )
     parser.add_argument("--checkpoint-file", type=Path, default=None)
     parser.add_argument("--contract-file", type=Path, default=None)
     parser.add_argument("--out-dir", type=Path, default=Path("/var/log/machines/ml_dataset"))
