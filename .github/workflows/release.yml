@@ -39,7 +39,7 @@ jobs:
       immutable_tag: ${{ steps.meta.outputs.immutable_tag }}
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Read centralized version from config/app.json
         id: meta
@@ -96,7 +96,7 @@ jobs:
     environment: staging
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Deploy Staging via Helm (when KUBECONFIG_STAGING is configured)
         env:
@@ -143,7 +143,7 @@ jobs:
     environment: production
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Deploy Production via Helm (when KUBECONFIG_PROD is configured)
         env:

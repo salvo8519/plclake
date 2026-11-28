@@ -231,5 +231,72 @@ class EdgeGatewayTests(unittest.TestCase):
             self.assertEqual(len(segments[0].read_text(encoding="utf-8").splitlines()), 2)
 
 
+class _RejectingSink:
+    """Fake ingest sink: rejects batches containing a poison event, or batches above a size."""
+
+    def __init__(self, poison_event_id: str | None = None, max_batch: int | None = None) -> None:
+        self.poison_event_id = poison_event_id
+        self.max_batch = max_batch
+        self.accepted: list[str] = []
+
+    def push_batch(self, events: list[dict[str, object]]) -> dict[str, object]:
+        import urllib.error
+
+        if self.max_batch is not None and len(events) > self.max_batch:
+            raise urllib.error.HTTPError("http://ingest", 413, "Payload Too Large", {}, None)  # type: ignore[arg-type]
+        if any(ev["event_id"] == self.poison_event_id for ev in events):
+            raise urllib.error.HTTPError("http://ingest", 400, "Bad Request", {}, None)  # type: ignore[arg-type]
+        self.accepted.extend(str(ev["event_id"]) for ev in events)
+        return {"accepted": len(events)}
+
+
+class SpoolResilienceTests(unittest.TestCase):
+    def _events(self, n: int) -> list[dict[str, object]]:
+        return [{"event_id": f"evt-{i}", "value": i} for i in range(n)]
+
+    def test_permanently_rejected_batch_is_dead_lettered_and_does_not_block_the_queue(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            spool = SpoolStore(Path(tmp) / "spool.db", max_mb=16)
+            spool.enqueue(self._events(6))
+            sink = _RejectingSink(poison_event_id="evt-1")
+            collector = EdgeCollector(connections=[], spool=spool, sink=sink, batch_size=2)  # type: ignore[arg-type]
+
+            stats = collector.flush_spool()
+
+            self.assertEqual(stats["dead_lettered"], 2)
+            self.assertEqual(stats["flushed"], 4)
+            self.assertEqual(spool.count(), 0)
+            self.assertEqual(spool.dead_letter_count(), 2)
+            self.assertEqual(sink.accepted, ["evt-2", "evt-3", "evt-4", "evt-5"])
+
+    def test_payload_too_large_splits_the_batch_instead_of_dropping_events(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            spool = SpoolStore(Path(tmp) / "spool.db", max_mb=16)
+            spool.enqueue(self._events(8))
+            sink = _RejectingSink(max_batch=2)
+            collector = EdgeCollector(connections=[], spool=spool, sink=sink, batch_size=8)  # type: ignore[arg-type]
+
+            stats = collector.flush_spool()
+
+            self.assertEqual(stats["flushed"], 8)
+            self.assertEqual(stats["dead_lettered"], 0)
+            self.assertEqual(spool.dead_letter_count(), 0)
+
+
+class HttpMeterTokenTests(unittest.TestCase):
+    def test_bearer_token_is_never_sent_over_plain_http_by_default(self) -> None:
+        import os
+        from unittest import mock
+
+        from edge_gateway.drivers import poll_http_rest_meter
+
+        with mock.patch.dict(os.environ, {"EDGE_HTTP_METER_TOKEN": "meter-secret"}, clear=False):
+            os.environ.pop("EDGE_HTTP_METER_ALLOW_PLAINTEXT_TOKEN", None)
+            with mock.patch("urllib.request.urlopen") as urlopen:
+                with self.assertRaises(ValueError):
+                    poll_http_rest_meter("10.0.0.5", 8080, "/data", "bearer-token", [])
+                urlopen.assert_not_called()
+
+
 if __name__ == "__main__":
     unittest.main()

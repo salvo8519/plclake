@@ -371,6 +371,16 @@ def poll_http_rest_meter(
     if auth_mode == "bearer-token":
         meter_token = os.getenv("EDGE_HTTP_METER_TOKEN", "").strip()
         if meter_token:
+            # Never leak the meter credential over clear-text HTTP unless explicitly accepted
+            # (e.g. an isolated OT segment where the meter has no TLS).
+            allow_plaintext = (
+                os.getenv("EDGE_HTTP_METER_ALLOW_PLAINTEXT_TOKEN", "").strip().lower() == "true"
+            )
+            if scheme != "https" and not allow_plaintext:
+                raise ValueError(
+                    f"Refusing to send bearer token over plain HTTP to {host}:{port}; "
+                    "use port 443 (HTTPS) or set EDGE_HTTP_METER_ALLOW_PLAINTEXT_TOKEN=true"
+                )
             headers["Authorization"] = f"Bearer {meter_token}"
 
     req = urllib.request.Request(url, headers=headers, method="GET")  # noqa: S310

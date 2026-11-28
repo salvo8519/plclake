@@ -10,7 +10,7 @@ import {
   encryptSecret,
   isEncryptedSecret,
   resolveSecretsMasterKey,
-  validateProbeHost,
+  validateOutboundHost,
 } from './security.ts';
 import { atomicWriteJson } from './utils/persistence.ts';
 import type {
@@ -35,7 +35,9 @@ import type {
   WebhookChannelConfig,
 } from './types/pipeline.ts';
 
-function validateMailpitApiUrl(rawUrl: string): { allowed: boolean; normalizedUrl: string; reason?: string } {
+async function validateMailpitApiUrl(
+  rawUrl: string
+): Promise<{ allowed: boolean; normalizedUrl: string; reason?: string }> {
   const trimmed = rawUrl.trim().replace(/\/+$/, '');
   if (!trimmed) {
     return { allowed: false, normalizedUrl: '', reason: 'Mailpit Web UI / API URL is empty.' };
@@ -57,7 +59,7 @@ function validateMailpitApiUrl(rawUrl: string): { allowed: boolean; normalizedUr
     };
   }
 
-  const hostCheck = validateProbeHost(parsed.hostname, { allowLoopback: true });
+  const hostCheck = await validateOutboundHost(parsed.hostname, { allowLoopback: true });
   if (!hostCheck.allowed) {
     return {
       allowed: false,
@@ -594,7 +596,7 @@ export class AlertEngine {
       };
     }
 
-    const smtpHostCheck = validateProbeHost(this.state.smtp.host, { allowLoopback: true });
+    const smtpHostCheck = await validateOutboundHost(this.state.smtp.host, { allowLoopback: true });
     if (!smtpHostCheck.allowed) {
       return {
         reachable: false,
@@ -683,7 +685,7 @@ export class AlertEngine {
       </div>
     </div>`;
 
-    const smtpHostCheck = validateProbeHost(this.state.smtp.host, { allowLoopback: true });
+    const smtpHostCheck = await validateOutboundHost(this.state.smtp.host, { allowLoopback: true });
     if (!smtpHostCheck.allowed) {
       return {
         outcome: {
@@ -744,7 +746,7 @@ export class AlertEngine {
     const checkedAt = new Date().toISOString();
     const startMs = Date.now();
     const candidateBase = apiBaseUrl?.trim() || this.state.smtp.mailpitUiUrl;
-    const validation = validateMailpitApiUrl(candidateBase);
+    const validation = await validateMailpitApiUrl(candidateBase);
     if (!validation.allowed) {
       return {
         connected: false,
@@ -874,7 +876,7 @@ export class AlertEngine {
     const checkedAt = new Date().toISOString();
     const startMs = Date.now();
     const candidateBase = options?.apiBaseUrl?.trim() || this.state.smtp.mailpitUiUrl;
-    const validation = validateMailpitApiUrl(candidateBase);
+    const validation = await validateMailpitApiUrl(candidateBase);
     if (!validation.allowed) {
       return {
         reachable: false,
@@ -980,7 +982,7 @@ export class AlertEngine {
     apiBaseUrl?: string
   ): Promise<MailpitMessageDetailResponse> {
     const candidateBase = apiBaseUrl?.trim() || this.state.smtp.mailpitUiUrl;
-    const validation = validateMailpitApiUrl(candidateBase);
+    const validation = await validateMailpitApiUrl(candidateBase);
     if (!validation.allowed) {
       return {
         reachable: false,
@@ -1094,7 +1096,7 @@ export class AlertEngine {
     error?: string | null;
   }> {
     const candidateBase = apiBaseUrl?.trim() || this.state.smtp.mailpitUiUrl;
-    const validation = validateMailpitApiUrl(candidateBase);
+    const validation = await validateMailpitApiUrl(candidateBase);
     if (!validation.allowed) {
       return {
         cleared: false,
@@ -1150,7 +1152,7 @@ export class AlertEngine {
       };
     }
 
-    const smtpHostCheck = validateProbeHost(this.state.smtp.host, { allowLoopback: true });
+    const smtpHostCheck = await validateOutboundHost(this.state.smtp.host, { allowLoopback: true });
     if (!smtpHostCheck.allowed) {
       return {
         channel: 'email',
@@ -1232,7 +1234,7 @@ export class AlertEngine {
       };
     }
 
-    const hostCheck = validateProbeHost(parsedUrl.hostname);
+    const hostCheck = await validateOutboundHost(parsedUrl.hostname);
     if (!hostCheck.allowed) {
       return {
         channel: 'webhook',

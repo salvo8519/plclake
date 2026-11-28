@@ -181,6 +181,11 @@ class EdgeConfigSyncClient:
         return True, meta, conns
 
 
+# HTTP statuses meaning "this payload will never be accepted": retrying would block the spool.
+# 401/403/408/429 and 5xx are transient or configuration issues and are retried.
+PERMANENT_REJECTION_STATUSES = frozenset({400, 413, 422})
+
+
 class SpoolStore:
     """Crash-safe SQLite WAL store-and-forward queue for VPN/WAN outages."""
 
@@ -205,6 +210,17 @@ class SpoolStore:
                     event_id TEXT UNIQUE NOT NULL,
                     payload_json TEXT NOT NULL,
                     created_at TEXT NOT NULL
+                );
+                """
+            )
+            con.execute(
+                """
+                CREATE TABLE IF NOT EXISTS dead_letter_events (
+                    seq INTEGER PRIMARY KEY,
+                    event_id TEXT NOT NULL,
+                    payload_json TEXT NOT NULL,
+                    reason TEXT NOT NULL,
+                    rejected_at TEXT NOT NULL
                 );
                 """
             )
@@ -248,6 +264,26 @@ class SpoolStore:
                 (batch_size,),
             ).fetchall()
         return [(int(seq), json.loads(payload_json)) for seq, payload_json in rows]
+
+    def dead_letter(self, seqs: list[int], reason: str) -> int:
+        """Moves rejected events out of the live queue so they cannot block later telemetry."""
+        if not seqs:
+            return 0
+        # Only "?" placeholders are interpolated; every value is a bound parameter.
+        in_clause = f"seq IN ({','.join('?' for _ in seqs)})"
+        move_sql = f"INSERT OR REPLACE INTO dead_letter_events (seq, event_id, payload_json, reason, rejected_at) SELECT seq, event_id, payload_json, ?, ? FROM spooled_events WHERE {in_clause};"  # noqa: S608, E501
+        delete_sql = f"DELETE FROM spooled_events WHERE {in_clause};"  # noqa: S608
+        now_iso = datetime.now(UTC).isoformat()
+        with self._connect() as con:
+            con.execute(move_sql, [reason[:500], now_iso, *seqs])
+            moved = con.execute(delete_sql, seqs).rowcount
+            con.commit()
+        return int(moved)
+
+    def dead_letter_count(self) -> int:
+        with self._connect() as con:
+            row = con.execute("SELECT COUNT(*) FROM dead_letter_events;").fetchone()
+            return int(row[0]) if row else 0
 
     def ack_seqs(self, seqs: list[int]) -> None:
         if not seqs:
@@ -417,8 +453,10 @@ class EdgeCollector:
     def flush_spool(self) -> dict[str, int]:
         flushed = 0
         failed_batches = 0
+        dead_lettered = 0
+        batch_size = self.batch_size
         while True:
-            batch = self.spool.peek_batch(self.batch_size)
+            batch = self.spool.peek_batch(batch_size)
             if not batch:
                 break
             seqs = [seq for seq, _ in batch]
@@ -427,6 +465,36 @@ class EdgeCollector:
                 self.sink.push_batch(events)
                 self.spool.ack_seqs(seqs)
                 flushed += len(events)
+            except urllib.error.HTTPError as exc:
+                if exc.code == 413 and len(batch) > 1:
+                    # Payload too large: retry the same events in smaller batches.
+                    batch_size = max(1, len(batch) // 2)
+                    continue
+                if exc.code in PERMANENT_REJECTION_STATUSES:
+                    # The server will never accept these events: park them in the dead-letter
+                    # table instead of blocking every later batch at the head of the queue.
+                    dead_lettered += self.spool.dead_letter(seqs, f"HTTP {exc.code}: {exc.reason}")
+                    print(
+                        json.dumps(
+                            {
+                                "level": "ERROR",
+                                "message": f"Ingest rejected {len(seqs)} events (HTTP {exc.code}); moved to dead-letter table",
+                            }
+                        ),
+                        flush=True,
+                    )
+                    continue
+                failed_batches += 1
+                print(
+                    json.dumps(
+                        {
+                            "level": "WARN",
+                            "message": f"Ingest returned HTTP {exc.code}; retained {self.spool.count()} events in SQLite spool",
+                        }
+                    ),
+                    flush=True,
+                )
+                break
             except (urllib.error.URLError, TimeoutError, OSError, ValueError) as exc:
                 failed_batches += 1
                 print(
@@ -442,6 +510,7 @@ class EdgeCollector:
         return {
             "flushed": flushed,
             "failed_batches": failed_batches,
+            "dead_lettered": dead_lettered,
             "remaining_spool": self.spool.count(),
         }
 

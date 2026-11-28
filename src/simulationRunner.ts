@@ -4,6 +4,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { getAllCatalogProfiles, resolveMachineSpec } from './machineCatalog.ts';
 import { resolveSiteId } from './logger.ts';
+import { BoundedRecentSet } from './utils/boundedRecentSet.ts';
 import { atomicWriteJson } from './utils/persistence.ts';
 import type { AlertEngine } from './alertEngine.ts';
 import type { DatabaseStore } from './db.ts';
@@ -84,8 +85,8 @@ interface InternalRun {
   baseSimMs: number;
   rng: SeededRng;
   profiles: MachineProfile[];
-  seenQuarantineIds: Set<string>;
-  seenEventKeys: Set<string>;
+  seenQuarantineIds: BoundedRecentSet;
+  seenEventKeys: BoundedRecentSet;
   quarantineRecords: QuarantineRecord[];
   recentLogs: LiveLogFeedEntry[];
   segments: LogSegmentInfo[];
@@ -93,6 +94,9 @@ interface InternalRun {
   currentSegBytes: number;
   segSeq: number;
   windowBuckets: Map<string, WindowBucket>;
+  /** Feature rows / anomalous windows already evicted from `windowBuckets`. */
+  evictedFeatureRows: number;
+  evictedAnomalousWindows: number;
   partitionSet: Set<string>;
   timer: ReturnType<typeof setInterval> | null;
   emitter: EventEmitter;
@@ -103,6 +107,14 @@ const MAX_RECENT_LOGS = 180;
 const MAX_QUARANTINE_DISPLAY = 200;
 const MAX_FEATURE_DISPLAY = 360;
 const MAX_EVENTS_PER_TICK = 4000;
+/**
+ * Upper bound on aggregation windows kept in memory per run. Continuous edge ingestion would
+ * otherwise grow memory and per-batch feature computation without limit. Older windows are
+ * folded into cumulative counters before eviction; snapshots only expose the newest rows.
+ */
+const MAX_WINDOW_BUCKETS = 5000;
+const WINDOW_BUCKET_EVICTION_TARGET = Math.floor(MAX_WINDOW_BUCKETS * 0.9);
+const MAX_DEDUP_KEYS = 50_000;
 
 const DOMAIN_PROFILE_MODES = new Set<string>([
   'mixed',
@@ -302,8 +314,8 @@ export class SimulationRunManager {
       baseSimMs,
       rng: new SeededRng(seed),
       profiles,
-      seenQuarantineIds: new Set<string>(),
-      seenEventKeys: new Set<string>(),
+      seenQuarantineIds: new BoundedRecentSet(MAX_DEDUP_KEYS),
+      seenEventKeys: new BoundedRecentSet(MAX_DEDUP_KEYS),
       quarantineRecords: [],
       recentLogs: [],
       segments: [],
@@ -311,6 +323,8 @@ export class SimulationRunManager {
       currentSegBytes: 0,
       segSeq: 0,
       windowBuckets: new Map<string, WindowBucket>(),
+      evictedFeatureRows: 0,
+      evictedAnomalousWindows: 0,
       partitionSet: new Set<string>(),
       timer: null,
       emitter: new EventEmitter(),
@@ -443,7 +457,6 @@ export class SimulationRunManager {
         continue;
       }
       run.seenEventKeys.add(dedupKey);
-      if (run.seenEventKeys.size > 50000) run.seenEventKeys.clear();
 
       const level: LogLevel = stateUpper === 'FAULT' ? 'ERROR' : stateUpper === 'DEGRADED' ? 'WARN' : 'INFO';
       const mergedMetrics: Record<string, number> = {
@@ -656,7 +669,6 @@ export class SimulationRunManager {
     const qid = payloadHash(reason, payload);
     if (run.seenQuarantineIds.has(qid)) return;
     run.seenQuarantineIds.add(qid);
-    if (run.seenQuarantineIds.size > 50000) run.seenQuarantineIds.clear();
     run.quarantinedCount += 1;
 
     if (run.config.malformedPolicy !== 'drop_and_count') {
@@ -794,9 +806,6 @@ export class SimulationRunManager {
 
         if (!run.seenEventKeys.has(dedupKey) && VALID_STATES.has(event.state)) {
           run.seenEventKeys.add(dedupKey);
-          if (run.seenEventKeys.size > 50000) {
-            run.seenEventKeys.clear();
-          }
           run.validEventsCount += 1;
           if (!run.highWatermarkIso || event.timestamp > run.highWatermarkIso) {
             run.highWatermarkIso = event.timestamp;
@@ -888,6 +897,9 @@ export class SimulationRunManager {
         timeline: [],
       };
       run.windowBuckets.set(key, bucket);
+      if (run.windowBuckets.size > MAX_WINDOW_BUCKETS) {
+        this.evictOldestWindowBuckets(run);
+      }
       const layout = run.config.partitionLayout ?? 'domain/dt';
       const hourPart = winStart.slice(11, 13);
       const partPath =
@@ -941,114 +953,137 @@ export class SimulationRunManager {
     }
   }
 
-  private materializeFeatures(run: InternalRun): MlFeatureRow[] {
+  /** Computes the ML feature row of a single aggregation window. */
+  private materializeBucket(run: InternalRun, bucket: WindowBucket): MlFeatureRow {
     const expectedSamples = Math.max(
       1,
       Math.floor((run.config.windowMinutes * 60) / Math.max(0.25, run.expectedSampleSec))
     );
-    const horizon = run.config.horizonWindows ?? 1;
     const vibCutoff = run.config.vibrationP95Threshold ?? 3.5;
+    const n = bucket.sampleCount;
+    const spec = resolveMachineSpec(bucket.machineType);
+
+    const primaryMean = Number((bucket.primarySum / n).toFixed(3));
+    const sortedPrimary = [...bucket.primaryValues].sort((a, b) => a - b);
+    const p95PIdx = Math.min(sortedPrimary.length - 1, Math.floor(0.95 * (sortedPrimary.length - 1)));
+    const primaryP95 = Number((sortedPrimary[p95PIdx] ?? 0).toFixed(3));
+    const primaryMax = Number(bucket.primaryMax.toFixed(3));
+    const secondaryMean = Number((bucket.secondarySum / n).toFixed(3));
+
+    const tempMean = Number((bucket.tempSum / n).toFixed(3));
+    const tempMax = Number(bucket.tempMax.toFixed(3));
+    const vibMean = Number((bucket.vibSum / n).toFixed(3));
+    const sortedVibs = [...bucket.vibValues].sort((a, b) => a - b);
+    const p95Idx = Math.min(sortedVibs.length - 1, Math.floor(0.95 * (sortedVibs.length - 1)));
+    const vibP95 = Number((sortedVibs[p95Idx] ?? 0).toFixed(3));
+    const vibMax = Number(bucket.vibMax.toFixed(3));
+
+    const cycleMean = Number((bucket.cycleSum / n).toFixed(2));
+    const cycleVar = n > 1 ? Math.max(0, bucket.cycleSqSum / n - cycleMean * cycleMean) : 0;
+    const cycleStd = Number(Math.sqrt(cycleVar).toFixed(2));
+
+    const ordered = [...bucket.timeline].sort((a, b) => a.tsMs - b.tsMs);
+    let transitions = 0;
+    for (let i = 1; i < ordered.length; i++) {
+      if (ordered[i].state !== ordered[i - 1].state) transitions += 1;
+    }
+
+    let timeInFaultSec = 0;
+    for (let i = 0; i < ordered.length; i++) {
+      if (ordered[i].state !== 'FAULT') continue;
+      if (i + 1 < ordered.length) {
+        const delta = (ordered[i + 1].tsMs - ordered[i].tsMs) / 1000;
+        timeInFaultSec += Math.max(0, Math.min(delta, run.expectedSampleSec * 3));
+      } else {
+        timeInFaultSec += run.expectedSampleSec;
+      }
+    }
+    timeInFaultSec = Number(timeInFaultSec.toFixed(2));
+
+    const missingHb = Math.max(0, expectedSamples - n);
+    const validRatio = Number(Math.min(1.0, n / expectedSamples).toFixed(4));
+    const tempLimit =
+      spec.domain === 'manufacturing' && run.config.tempAnomalyThresholdC
+        ? run.config.tempAnomalyThresholdC
+        : spec.tempFaultThresholdC;
+    const isAnomalous =
+      bucket.faultCount > 0 ||
+      bucket.degradedCount >= 2 ||
+      tempMax > tempLimit ||
+      primaryMax > spec.primaryFaultThreshold ||
+      (spec.domain === 'manufacturing' && vibP95 > vibCutoff)
+        ? 1
+        : 0;
+
+    const customMetricsAvg: Record<string, number> = {};
+    for (const [k, sumVal] of Object.entries(bucket.customSums)) {
+      const cnt = bucket.customCounts[k] ?? 1;
+      customMetricsAvg[k] = Number((sumVal / Math.max(1, cnt)).toFixed(3));
+    }
+
+    return {
+      site_id: resolveSiteId(),
+      machine_id: bucket.machineId,
+      window_start: bucket.windowStart,
+      window_minutes: run.config.windowMinutes,
+      dt: bucket.dt,
+      line_id: bucket.lineId,
+      machine_type: bucket.machineType,
+      domain: bucket.domain,
+      sample_count: n,
+      valid_sample_ratio: validRatio,
+      primary_metric_name: bucket.primaryMetricName,
+      primary_metric_unit: bucket.primaryMetricUnit,
+      primary_metric_mean: primaryMean,
+      primary_metric_p95: primaryP95,
+      primary_metric_max: primaryMax,
+      secondary_metric_name: bucket.secondaryMetricName,
+      secondary_metric_unit: bucket.secondaryMetricUnit,
+      secondary_metric_mean: secondaryMean,
+      temp_mean: tempMean,
+      temp_max: tempMax,
+      vibration_mean: vibMean,
+      vibration_p95: vibP95,
+      vibration_max: vibMax,
+      cycle_ms_mean: cycleMean,
+      cycle_ms_std: cycleStd,
+      error_count: bucket.errorCount,
+      fault_count: bucket.faultCount,
+      degraded_count: bucket.degradedCount,
+      state_transitions_count: transitions,
+      time_in_fault_sec: timeInFaultSec,
+      missing_heartbeat_count: missingHb,
+      is_anomalous_window: isAnomalous,
+      will_fail_next_window: null,
+      dataset_version: run.config.datasetVersion || 'v1.0.0',
+      ...(Object.keys(customMetricsAvg).length > 0 ? { custom_metrics_avg: customMetricsAvg } : {}),
+    };
+  }
+
+  /**
+   * Evicts the oldest aggregation windows (by window start) down to the eviction target,
+   * folding them into cumulative counters so snapshot totals stay exact.
+   */
+  private evictOldestWindowBuckets(run: InternalRun): void {
+    const overflow = run.windowBuckets.size - WINDOW_BUCKET_EVICTION_TARGET;
+    if (overflow <= 0) return;
+    const oldestFirst = [...run.windowBuckets.entries()].sort((a, b) =>
+      a[1].windowStart.localeCompare(b[1].windowStart)
+    );
+    for (const [key, bucket] of oldestFirst.slice(0, overflow)) {
+      const row = this.materializeBucket(run, bucket);
+      run.evictedFeatureRows += 1;
+      run.evictedAnomalousWindows += row.is_anomalous_window;
+      run.windowBuckets.delete(key);
+    }
+  }
+
+  private materializeFeatures(run: InternalRun): MlFeatureRow[] {
+    const horizon = run.config.horizonWindows ?? 1;
     const features: MlFeatureRow[] = [];
 
     for (const bucket of run.windowBuckets.values()) {
-      const n = bucket.sampleCount;
-      const spec = resolveMachineSpec(bucket.machineType);
-
-      const primaryMean = Number((bucket.primarySum / n).toFixed(3));
-      const sortedPrimary = [...bucket.primaryValues].sort((a, b) => a - b);
-      const p95PIdx = Math.min(sortedPrimary.length - 1, Math.floor(0.95 * (sortedPrimary.length - 1)));
-      const primaryP95 = Number((sortedPrimary[p95PIdx] ?? 0).toFixed(3));
-      const primaryMax = Number(bucket.primaryMax.toFixed(3));
-      const secondaryMean = Number((bucket.secondarySum / n).toFixed(3));
-
-      const tempMean = Number((bucket.tempSum / n).toFixed(3));
-      const tempMax = Number(bucket.tempMax.toFixed(3));
-      const vibMean = Number((bucket.vibSum / n).toFixed(3));
-      const sortedVibs = [...bucket.vibValues].sort((a, b) => a - b);
-      const p95Idx = Math.min(sortedVibs.length - 1, Math.floor(0.95 * (sortedVibs.length - 1)));
-      const vibP95 = Number((sortedVibs[p95Idx] ?? 0).toFixed(3));
-      const vibMax = Number(bucket.vibMax.toFixed(3));
-
-      const cycleMean = Number((bucket.cycleSum / n).toFixed(2));
-      const cycleVar = n > 1 ? Math.max(0, bucket.cycleSqSum / n - cycleMean * cycleMean) : 0;
-      const cycleStd = Number(Math.sqrt(cycleVar).toFixed(2));
-
-      const ordered = [...bucket.timeline].sort((a, b) => a.tsMs - b.tsMs);
-      let transitions = 0;
-      for (let i = 1; i < ordered.length; i++) {
-        if (ordered[i].state !== ordered[i - 1].state) transitions += 1;
-      }
-
-      let timeInFaultSec = 0;
-      for (let i = 0; i < ordered.length; i++) {
-        if (ordered[i].state !== 'FAULT') continue;
-        if (i + 1 < ordered.length) {
-          const delta = (ordered[i + 1].tsMs - ordered[i].tsMs) / 1000;
-          timeInFaultSec += Math.max(0, Math.min(delta, run.expectedSampleSec * 3));
-        } else {
-          timeInFaultSec += run.expectedSampleSec;
-        }
-      }
-      timeInFaultSec = Number(timeInFaultSec.toFixed(2));
-
-      const missingHb = Math.max(0, expectedSamples - n);
-      const validRatio = Number(Math.min(1.0, n / expectedSamples).toFixed(4));
-      const tempLimit =
-        spec.domain === 'manufacturing' && run.config.tempAnomalyThresholdC
-          ? run.config.tempAnomalyThresholdC
-          : spec.tempFaultThresholdC;
-      const isAnomalous =
-        bucket.faultCount > 0 ||
-        bucket.degradedCount >= 2 ||
-        tempMax > tempLimit ||
-        primaryMax > spec.primaryFaultThreshold ||
-        (spec.domain === 'manufacturing' && vibP95 > vibCutoff)
-          ? 1
-          : 0;
-
-      const customMetricsAvg: Record<string, number> = {};
-      for (const [k, sumVal] of Object.entries(bucket.customSums)) {
-        const cnt = bucket.customCounts[k] ?? 1;
-        customMetricsAvg[k] = Number((sumVal / Math.max(1, cnt)).toFixed(3));
-      }
-
-      features.push({
-        site_id: resolveSiteId(),
-        machine_id: bucket.machineId,
-        window_start: bucket.windowStart,
-        window_minutes: run.config.windowMinutes,
-        dt: bucket.dt,
-        line_id: bucket.lineId,
-        machine_type: bucket.machineType,
-        domain: bucket.domain,
-        sample_count: n,
-        valid_sample_ratio: validRatio,
-        primary_metric_name: bucket.primaryMetricName,
-        primary_metric_unit: bucket.primaryMetricUnit,
-        primary_metric_mean: primaryMean,
-        primary_metric_p95: primaryP95,
-        primary_metric_max: primaryMax,
-        secondary_metric_name: bucket.secondaryMetricName,
-        secondary_metric_unit: bucket.secondaryMetricUnit,
-        secondary_metric_mean: secondaryMean,
-        temp_mean: tempMean,
-        temp_max: tempMax,
-        vibration_mean: vibMean,
-        vibration_p95: vibP95,
-        vibration_max: vibMax,
-        cycle_ms_mean: cycleMean,
-        cycle_ms_std: cycleStd,
-        error_count: bucket.errorCount,
-        fault_count: bucket.faultCount,
-        degraded_count: bucket.degradedCount,
-        state_transitions_count: transitions,
-        time_in_fault_sec: timeInFaultSec,
-        missing_heartbeat_count: missingHb,
-        is_anomalous_window: isAnomalous,
-        will_fail_next_window: null,
-        dataset_version: run.config.datasetVersion || 'v1.0.0',
-        ...(Object.keys(customMetricsAvg).length > 0 ? { custom_metrics_avg: customMetricsAvg } : {}),
-      });
+      features.push(this.materializeBucket(run, bucket));
     }
 
     features.sort((a, b) => {
@@ -1111,8 +1146,9 @@ export class SimulationRunManager {
       rotatedSegmentsCount: run.segSeq,
       highWatermarkIso: run.highWatermarkIso,
       expectedSampleSec: run.expectedSampleSec,
-      anomalousWindowsCount: allFeatures.filter((f) => f.is_anomalous_window === 1).length,
-      featureRowsCount: allFeatures.length,
+      anomalousWindowsCount:
+        run.evictedAnomalousWindows + allFeatures.filter((f) => f.is_anomalous_window === 1).length,
+      featureRowsCount: run.evictedFeatureRows + allFeatures.length,
       tieringSummary: {
         hotStoreLabel: 'PostgreSQL 16 (Partitioned dt)',
         hotRetentionDays: run.config.hotRetentionDays ?? 90,

@@ -62,7 +62,11 @@ services:
       SMTP_PORT: "1025"
       SMTP_FROM: alerts@telemetry.plant.local
       MAILPIT_UI_URL: http://mailpit:8025
-      API_ENFORCE_AUTH: ${API_ENFORCE_AUTH:-false}
+      # Production mode always enforces API authentication (see src/config/runtimeEnv.ts).
+      API_ENFORCE_AUTH: "true"
+      AUTH_ADMIN_EMAIL: ${AUTH_ADMIN_EMAIL:-admin@plant.local}
+      AUTH_ADMIN_PASSWORD: ${AUTH_ADMIN_PASSWORD:?Set AUTH_ADMIN_PASSWORD (min 12 chars) in .env}
+      SECRETS_ENCRYPTION_KEY: ${SECRETS_ENCRYPTION_KEY:?Set 64-hex SECRETS_ENCRYPTION_KEY in .env (openssl rand -hex 32)}
       SCALAR_CDN_URL: ${SCALAR_CDN_URL:-}
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3000/readyz"]
@@ -96,7 +100,7 @@ services:
       - "3001:3000"
     environment:
       GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
-      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?Set GRAFANA_ADMIN_PASSWORD in .env}
       GF_USERS_ALLOW_SIGN_UP: "false"
       GF_DEFAULT_THEME: light
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-mlops_local_dev}
