@@ -169,6 +169,9 @@ export function defaultTagBindingsForMachine(
   ];
 }
 
+/** Pinned Mailpit image for generated deployment bundles (keep in sync with the compose files). */
+const MAILPIT_IMAGE = 'axllent/mailpit:v1.34.0';
+
 export class ConnectionManager {
   private stateFile: string;
   private state: PersistedConnectionsState;
@@ -762,7 +765,6 @@ export class ConnectionManager {
       `EDGE_SPOOL_MAX_MB=${this.state.settings.spoolMaxMb}`,
       `EDGE_BATCH_SIZE=200`,
       `EDGE_GATEWAY_TOKEN=${this.state.settings.requireGatewayToken ? '<PASTE_ROTATED_TOKEN>' : ''}`,
-      `DATABASE_URL=postgres://mlops:change_me_onprem@postgres:5432/machine_logs`,
       `SMTP_HOST=mailpit`,
       `SMTP_PORT=1025`,
       `SMTP_FROM=alerts@telemetry.plant.local`,
@@ -770,28 +772,31 @@ export class ConnectionManager {
     ].join('\n');
 
     /* eslint-disable no-template-curly-in-string */
+    // biome-ignore-start lint/suspicious/noTemplateCurlyInString: Docker Compose ${VAR} syntax, not JavaScript templates.
     const onPremComposeYml = [
       '# On-Premise Corporate LAN Stack (OT/IT Plug & Play Plant Deployment + Mailpit SMTP)',
+      '# Required in .env: POSTGRES_PASSWORD. Published ports bind to 127.0.0.1 unless',
+      '# PLCLAKE_BIND_ADDR is set explicitly (e.g. the server LAN address).',
       'services:',
       '  postgres:',
       '    image: postgres:16-alpine',
       '    restart: unless-stopped',
       '    environment:',
       '      POSTGRES_USER: ${POSTGRES_USER:-mlops}',
-      '      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change_me_onprem}',
+      '      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}',
       '      POSTGRES_DB: ${POSTGRES_DB:-machine_logs}',
       '    ports:',
-      '      - "5432:5432"',
+      '      - "${PLCLAKE_BIND_ADDR:-127.0.0.1}:5432:5432"',
       '    volumes:',
       '      - postgres_data:/var/lib/postgresql/data',
       '      - ./deploy/postgres/init.sql:/docker-entrypoint-initdb.d/01_init.sql:ro',
       '',
       '  mailpit:',
-      '    image: axllent/mailpit:latest',
+      `    image: ${MAILPIT_IMAGE}`,
       '    restart: unless-stopped',
       '    ports:',
-      '      - "1025:1025"',
-      '      - "8025:8025"',
+      '      - "${PLCLAKE_BIND_ADDR:-127.0.0.1}:1025:1025"',
+      '      - "${PLCLAKE_BIND_ADDR:-127.0.0.1}:8025:8025"',
       '    environment:',
       '      MP_MAX_MESSAGES: "5000"',
       '      MP_SMTP_AUTH_ACCEPT_ANY: "1"',
@@ -801,7 +806,7 @@ export class ConnectionManager {
       '    image: dxflrs/garage:v1.0.1',
       '    restart: unless-stopped',
       '    ports:',
-      '      - "3900:3900"',
+      '      - "${PLCLAKE_BIND_ADDR:-127.0.0.1}:3900:3900"',
       '    volumes:',
       '      - garage_cold_data:/var/lib/garage/data',
       '',
@@ -825,6 +830,7 @@ export class ConnectionManager {
       '  edge_spool:',
       '  logs_data:',
     ].join('\n');
+    // biome-ignore-end lint/suspicious/noTemplateCurlyInString: end of the compose template.
     /* eslint-enable no-template-curly-in-string */
 
     const installScriptSh = [

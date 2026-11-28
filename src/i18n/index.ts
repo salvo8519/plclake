@@ -47,6 +47,7 @@ export function persistLanguagePreference(lang: SupportedLanguage): void {
   }
   if (typeof document !== 'undefined') {
     document.documentElement.lang = lang;
+    // biome-ignore lint/suspicious/noDocumentCookie: the server reads this cookie for the API docs language; the Cookie Store API is not available in every supported browser.
     document.cookie = `${LANGUAGE_COOKIE_NAME}=${encodeURIComponent(lang)}; path=/; max-age=31536000; SameSite=Lax`;
   }
 }

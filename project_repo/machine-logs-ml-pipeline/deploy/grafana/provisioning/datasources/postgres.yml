@@ -8,7 +8,7 @@ datasources:
     url: postgres:5432
     user: ${POSTGRES_USER:-mlops}
     secureJsonData:
-      password: ${POSTGRES_PASSWORD:-change_me_onprem}
+      password: ${POSTGRES_PASSWORD}
     jsonData:
       database: ${POSTGRES_DB:-machine_logs}
       sslmode: disable

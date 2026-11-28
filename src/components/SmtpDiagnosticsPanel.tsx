@@ -239,7 +239,7 @@ export function SmtpDiagnosticsPanel({
         }),
       });
       const data = (await resp.json().catch(() => null)) as SmtpDiagnosticSendResult | null;
-      if (data && data.outcome) {
+      if (data?.outcome) {
         setLastSendResult(data);
         if (data.outcome.status === 'sent') {
           // Allow Mailpit a brief moment to index the newly delivered email before refreshing status & inbox

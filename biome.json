@@ -1,5 +1,5 @@
 {
-  "$schema": "https://biomejs.dev/schemas/2.0.0/schema.json",
+  "$schema": "https://biomejs.dev/schemas/2.6.9/schema.json",
   "vcs": {
     "enabled": true,
     "clientKind": "git",
@@ -13,10 +13,10 @@
       "scripts/**",
       "tests/**",
       "vite.config.ts",
-      "!dist/**",
-      "!site/**",
-      "!docs/api/**",
-      "!project_repo/**"
+      "!dist",
+      "!site",
+      "!docs/api",
+      "!project_repo"
     ]
   },
   "formatter": {
@@ -40,7 +40,7 @@
   "linter": {
     "enabled": true,
     "rules": {
-      "recommended": true,
+      "preset": "recommended",
       "suspicious": {
         "noExplicitAny": "warn",
         "noArrayIndexKey": "off"

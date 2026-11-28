@@ -10,9 +10,9 @@ services:
     environment:
       POSTGRES_DB: machine_logs
       POSTGRES_USER: mlops
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-mlops_local_dev}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
     ports:
-      - "5432:5432"
+      - "${PLCLAKE_BIND_ADDR:-127.0.0.1}:5432:5432"
     volumes:
       - telemetry_pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -22,12 +22,12 @@ services:
       retries: 10
 
   mailpit:
-    image: axllent/mailpit:latest
+    image: axllent/mailpit:v1.34.0
     container_name: telemetry-mailpit
     restart: unless-stopped
     ports:
-      - "1025:1025"   # SMTP relay endpoint
-      - "8025:8025"   # Mailpit Web UI & REST API
+      - "${PLCLAKE_BIND_ADDR:-127.0.0.1}:1025:1025"   # SMTP relay endpoint
+      - "${PLCLAKE_BIND_ADDR:-127.0.0.1}:8025:8025"   # Mailpit Web UI & REST API
     environment:
       MP_SMTP_AUTH_ACCEPT_ANY: "1"
       MP_SMTP_AUTH_ALLOW_INSECURE: "1"
@@ -57,7 +57,7 @@ services:
       PORT: "3000"
       PLANT_SITE_ID: ${PLANT_SITE_ID:-plant-01}
       LOG_LEVEL: ${LOG_LEVEL:-info}
-      DATABASE_URL: postgres://mlops:${POSTGRES_PASSWORD:-mlops_local_dev}@postgres:5432/machine_logs
+      DATABASE_URL: postgres://mlops:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}@postgres:5432/machine_logs
       SMTP_HOST: mailpit
       SMTP_PORT: "1025"
       SMTP_FROM: alerts@telemetry.plant.local
@@ -81,7 +81,7 @@ services:
     depends_on:
       - app
     ports:
-      - "9090:9090"
+      - "${PLCLAKE_BIND_ADDR:-127.0.0.1}:9090:9090"
     volumes:
       - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - telemetry_promdata:/prometheus
@@ -97,13 +97,13 @@ services:
       - prometheus
       - postgres
     ports:
-      - "3001:3000"
+      - "${PLCLAKE_BIND_ADDR:-127.0.0.1}:3001:3000"
     environment:
       GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
       GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?Set GRAFANA_ADMIN_PASSWORD in .env}
       GF_USERS_ALLOW_SIGN_UP: "false"
       GF_DEFAULT_THEME: light
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-mlops_local_dev}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
     volumes:
       - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
       - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro

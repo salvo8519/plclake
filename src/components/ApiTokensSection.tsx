@@ -148,6 +148,7 @@ export function ApiTokensSection({
     });
   }, [tokens, searchQuery, statusFilter]);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: the filters are the trigger; pagination resets whenever they change.
   useEffect(() => {
     setCurrentPage(1);
   }, [searchQuery, statusFilter]);

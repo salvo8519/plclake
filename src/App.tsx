@@ -499,11 +499,12 @@ export default function App() {
     [attachStream, loadPlcCatalog, startLiveRun, t]
   );
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: boot runs once on mount; re-running it on language change would reload the workspace.
   useEffect(() => {
     const boot = async () => {
       const auth = await refreshAuthState();
       setAuthReady(true);
-      if (auth && auth.authEnforced && !auth.user) {
+      if (auth?.authEnforced && !auth.user) {
         return;
       }
       await loadWorkspaceData(Boolean(auth?.permissions.canControlSimulation ?? true));
@@ -552,7 +553,7 @@ export default function App() {
     setSessionApiKey(null);
     closeStream();
     const nextAuth = await refreshAuthState();
-    if (nextAuth && nextAuth.authEnforced) {
+    if (nextAuth?.authEnforced) {
       setShowLoginModal(true);
     }
   };
