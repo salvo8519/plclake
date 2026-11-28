@@ -1,4 +1,3 @@
-import fs from 'node:fs/promises';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import express, { type Request, type Response } from 'express';
@@ -55,19 +54,18 @@ import {
   type ApiAuthScope,
 } from './src/security.ts';
 import {
-  DEFAULT_JOB_CONFIG,
   WHITE_LABEL_EDITORIAL_CSS,
   buildScalarTopBarHtml,
-  sanitizeJobConfig,
 } from './src/serverConfig.ts';
 import { SimulationRunManager } from './src/simulationRunner.ts';
-import { atomicWriteJson, flushPendingWrites, sanitizeCsvCell } from './src/utils/persistence.ts';
+import { flushPendingWrites, sanitizeCsvCell } from './src/utils/persistence.ts';
 import { createJsonErrorHandler, forwardAsyncErrors, withName } from './src/utils/asyncRouter.ts';
 import {
   getRequestContext,
   normalizePermissiveConnectionInput,
   normalizePermissiveEvent,
 } from './src/http/requestInput.ts';
+import { JobConfigStore } from './src/http/jobConfigStore.ts';
 import {
   collectProductionConfigErrors,
   isProductionRuntime,
@@ -104,7 +102,6 @@ export async function createApp(options: CreateAppOptions = {}) {
     });
   }
   const rootDir = options.rootDir ?? DEFAULT_ROOT_DIR;
-  const configStateFile = path.resolve(rootDir, '.state', 'job-config.json');
   const dbStore = options.dbStore ?? new DatabaseStore();
   await dbStore.init();
 
@@ -113,53 +110,12 @@ export async function createApp(options: CreateAppOptions = {}) {
   const runManager = new SimulationRunManager(rootDir, dbStore, alertEngine);
   const connectionManager = new ConnectionManager(rootDir, dbStore);
   const plcCatalogManager = new PlcCatalogManager(rootDir, dbStore);
-
-  let activeJobConfig: JobConfig = { ...DEFAULT_JOB_CONFIG };
-  let jobConfigUpdatedAt = new Date().toISOString();
-
-  async function loadPersistedConfig(): Promise<void> {
-    let parsed: { config?: Partial<JobConfig>; updatedAt?: string } | null = null;
-    try {
-      if (dbStore.isPostgresActive()) {
-        parsed = await dbStore.getState<{ config?: Partial<JobConfig>; updatedAt?: string }>('job_config');
-      }
-    } catch {
-      // Fallback to local state file
-    }
-    if (!parsed) {
-      try {
-        const raw = await fs.readFile(configStateFile, 'utf-8');
-        parsed = JSON.parse(raw) as { config?: Partial<JobConfig>; updatedAt?: string };
-      } catch {
-        // Initial startup without persisted state file
-      }
-    }
-    if (parsed?.config) {
-      activeJobConfig = sanitizeJobConfig(parsed.config, DEFAULT_JOB_CONFIG);
-      if (parsed.updatedAt) jobConfigUpdatedAt = parsed.updatedAt;
-    }
-  }
-
-  async function persistJobConfig(): Promise<void> {
-    const payload = { config: activeJobConfig, updatedAt: jobConfigUpdatedAt };
-    try {
-      if (dbStore.isPostgresActive()) {
-        await dbStore.saveState('job_config', payload);
-      }
-    } catch {
-      // Fall through to local atomic mirror
-    }
-    try {
-      await atomicWriteJson(configStateFile, payload, true);
-    } catch {
-      // Non-fatal in ephemeral containers
-    }
-  }
+  const jobConfig = new JobConfigStore(rootDir, dbStore);
 
   await authAuditManager.init();
   await alertEngine.init();
   await plcCatalogManager.init();
-  await loadPersistedConfig();
+  await jobConfig.load();
   await connectionManager.init();
   await runManager.init();
 
@@ -265,7 +221,7 @@ export async function createApp(options: CreateAppOptions = {}) {
     res.setHeader('Cache-Control', 'no-store');
     res.json(
       buildRuntimeVersionInfo({
-        environment: activeJobConfig.environment,
+        environment: jobConfig.current.environment,
         plantSiteId: resolveSiteId(),
       })
     );
@@ -506,7 +462,7 @@ export async function createApp(options: CreateAppOptions = {}) {
     res.setHeader('Cache-Control', 'no-store');
     res.json(
       buildRuntimeVersionInfo({
-        environment: activeJobConfig.environment,
+        environment: jobConfig.current.environment,
         plantSiteId: resolveSiteId(),
       })
     );
@@ -519,7 +475,7 @@ export async function createApp(options: CreateAppOptions = {}) {
       status: 'ok',
       name: APP_NAME,
       version: APP_VERSION,
-      environment: activeJobConfig.environment,
+      environment: jobConfig.current.environment,
       apiVersion: APP_VERSION,
       activeRunId: latest?.runId ?? null,
       activeRunStatus: latest?.status ?? null,
@@ -1384,8 +1340,8 @@ export async function createApp(options: CreateAppOptions = {}) {
 
   apiRouter.get('/job/config', requireScope('read'), (_req, res) => {
     res.json({
-      config: activeJobConfig,
-      updatedAt: jobConfigUpdatedAt,
+      config: jobConfig.current,
+      updatedAt: jobConfig.updatedAt,
     });
   });
 
@@ -1404,12 +1360,10 @@ export async function createApp(options: CreateAppOptions = {}) {
         return;
       }
 
-      activeJobConfig = sanitizeJobConfig(parsed.data as Partial<JobConfig>, activeJobConfig);
-      jobConfigUpdatedAt = new Date().toISOString();
-      await persistJobConfig();
+      await jobConfig.update(parsed.data as Partial<JobConfig>);
       res.json({
-        config: activeJobConfig,
-        updatedAt: jobConfigUpdatedAt,
+        config: jobConfig.current,
+        updatedAt: jobConfig.updatedAt,
       });
     } catch (err) {
       logInternalError(err, 'Unable to save job configuration', requestId);
@@ -1463,27 +1417,27 @@ export async function createApp(options: CreateAppOptions = {}) {
       }
 
       const result = runManager.ingestExternalBatch(rawEvents, {
-        windowMinutes: activeJobConfig.windowMinutes,
-        machinesPerLine: activeJobConfig.machinesPerLine,
-        machineProfileMode: activeJobConfig.machineProfileMode,
-        rotateMaxLines: activeJobConfig.rotateMaxLines,
-        customMachineTopology: activeJobConfig.customMachineTopology,
-        ignoredErrorCodes: activeJobConfig.ignoredErrorCodes,
-        horizonWindows: activeJobConfig.horizonWindows,
-        tempAnomalyThresholdC: activeJobConfig.tempAnomalyThresholdC,
-        vibrationP95Threshold: activeJobConfig.vibrationP95Threshold,
-        minValidSampleRatio: activeJobConfig.minValidSampleRatio,
-        dedupStrategy: activeJobConfig.dedupStrategy,
-        malformedPolicy: activeJobConfig.malformedPolicy,
-        parquetCompression: activeJobConfig.parquetCompression,
-        datasetVersion: activeJobConfig.datasetVersion,
-        partitionLayout: activeJobConfig.partitionLayout,
-        lakehouseFormat: activeJobConfig.lakehouseFormat,
-        hotRetentionDays: activeJobConfig.hotRetentionDays,
-        coldRetentionDays: activeJobConfig.coldRetentionDays,
-        coldStorageEndpoint: activeJobConfig.coldStorageEndpoint,
-        compactionSchedule: activeJobConfig.compactionSchedule,
-        ingestTransport: activeJobConfig.ingestTransport,
+        windowMinutes: jobConfig.current.windowMinutes,
+        machinesPerLine: jobConfig.current.machinesPerLine,
+        machineProfileMode: jobConfig.current.machineProfileMode,
+        rotateMaxLines: jobConfig.current.rotateMaxLines,
+        customMachineTopology: jobConfig.current.customMachineTopology,
+        ignoredErrorCodes: jobConfig.current.ignoredErrorCodes,
+        horizonWindows: jobConfig.current.horizonWindows,
+        tempAnomalyThresholdC: jobConfig.current.tempAnomalyThresholdC,
+        vibrationP95Threshold: jobConfig.current.vibrationP95Threshold,
+        minValidSampleRatio: jobConfig.current.minValidSampleRatio,
+        dedupStrategy: jobConfig.current.dedupStrategy,
+        malformedPolicy: jobConfig.current.malformedPolicy,
+        parquetCompression: jobConfig.current.parquetCompression,
+        datasetVersion: jobConfig.current.datasetVersion,
+        partitionLayout: jobConfig.current.partitionLayout,
+        lakehouseFormat: jobConfig.current.lakehouseFormat,
+        hotRetentionDays: jobConfig.current.hotRetentionDays,
+        coldRetentionDays: jobConfig.current.coldRetentionDays,
+        coldStorageEndpoint: jobConfig.current.coldStorageEndpoint,
+        compactionSchedule: jobConfig.current.compactionSchedule,
+        ingestTransport: jobConfig.current.ingestTransport,
       });
 
       const countsByMachine = new Map<string, number>();
@@ -1687,16 +1641,16 @@ export async function createApp(options: CreateAppOptions = {}) {
       };
 
       const result = runManager.ingestExternalBatch([envelope], {
-        windowMinutes: activeJobConfig.windowMinutes,
-        machinesPerLine: activeJobConfig.machinesPerLine,
-        machineProfileMode: activeJobConfig.machineProfileMode,
-        rotateMaxLines: activeJobConfig.rotateMaxLines,
-        dedupStrategy: activeJobConfig.dedupStrategy,
-        malformedPolicy: activeJobConfig.malformedPolicy,
-        parquetCompression: activeJobConfig.parquetCompression,
-        datasetVersion: activeJobConfig.datasetVersion,
-        partitionLayout: activeJobConfig.partitionLayout,
-        lakehouseFormat: activeJobConfig.lakehouseFormat,
+        windowMinutes: jobConfig.current.windowMinutes,
+        machinesPerLine: jobConfig.current.machinesPerLine,
+        machineProfileMode: jobConfig.current.machineProfileMode,
+        rotateMaxLines: jobConfig.current.rotateMaxLines,
+        dedupStrategy: jobConfig.current.dedupStrategy,
+        malformedPolicy: jobConfig.current.malformedPolicy,
+        parquetCompression: jobConfig.current.parquetCompression,
+        datasetVersion: jobConfig.current.datasetVersion,
+        partitionLayout: jobConfig.current.partitionLayout,
+        lakehouseFormat: jobConfig.current.lakehouseFormat,
         ingestTransport: 'http-batch-ingest',
       });
 
@@ -1815,7 +1769,7 @@ export async function createApp(options: CreateAppOptions = {}) {
     res.json({
       generatedAt: new Date().toISOString(),
       dataSource,
-      datasetVersion: activeJobConfig.datasetVersion,
+      datasetVersion: jobConfig.current.datasetVersion,
       filters: {
         machineType: machineType ?? null,
         domain: domain ?? null,
@@ -1853,12 +1807,12 @@ export async function createApp(options: CreateAppOptions = {}) {
         durationMinutes: Number(body.durationMinutes ?? 15),
         eventsPerSec: Number(body.eventsPerSec ?? 10),
         speedMultiplier: Number(body.speedMultiplier ?? 10) as 1 | 10 | 60 | 300,
-        windowMinutes: Number(body.windowMinutes ?? activeJobConfig.windowMinutes),
+        windowMinutes: Number(body.windowMinutes ?? jobConfig.current.windowMinutes),
         machineCount: Number(body.machineCount ?? 4),
-        machinesPerLine: Number(body.machinesPerLine ?? activeJobConfig.machinesPerLine),
+        machinesPerLine: Number(body.machinesPerLine ?? jobConfig.current.machinesPerLine),
         machineProfileMode:
           (body.machineProfileMode as MachineProfileMode | undefined) ??
-          activeJobConfig.machineProfileMode,
+          jobConfig.current.machineProfileMode,
         selectedPlcTypes: Array.isArray(body.selectedPlcTypes)
           ? (body.selectedPlcTypes as string[])
           : undefined,
@@ -1868,56 +1822,56 @@ export async function createApp(options: CreateAppOptions = {}) {
         faultProbabilityPct: Number(body.faultProbabilityPct ?? 5),
         malformedRatePct: Number(body.malformedRatePct ?? 7),
         outOfOrderRatePct: Number(body.outOfOrderRatePct ?? 8),
-        rotateMaxLines: Number(body.rotateMaxLines ?? activeJobConfig.rotateMaxLines),
+        rotateMaxLines: Number(body.rotateMaxLines ?? jobConfig.current.rotateMaxLines),
         seed: Number(body.seed ?? 42),
         customMachineTopology:
           typeof body.customMachineTopology === 'string'
             ? body.customMachineTopology
-            : activeJobConfig.customMachineTopology,
+            : jobConfig.current.customMachineTopology,
         ignoredErrorCodes:
           typeof body.ignoredErrorCodes === 'string'
             ? body.ignoredErrorCodes
-            : activeJobConfig.ignoredErrorCodes,
-        horizonWindows: Number(body.horizonWindows ?? activeJobConfig.horizonWindows),
+            : jobConfig.current.ignoredErrorCodes,
+        horizonWindows: Number(body.horizonWindows ?? jobConfig.current.horizonWindows),
         tempAnomalyThresholdC: Number(
-          body.tempAnomalyThresholdC ?? activeJobConfig.tempAnomalyThresholdC
+          body.tempAnomalyThresholdC ?? jobConfig.current.tempAnomalyThresholdC
         ),
         vibrationP95Threshold: Number(
-          body.vibrationP95Threshold ?? activeJobConfig.vibrationP95Threshold
+          body.vibrationP95Threshold ?? jobConfig.current.vibrationP95Threshold
         ),
         minValidSampleRatio: Number(
-          body.minValidSampleRatio ?? activeJobConfig.minValidSampleRatio
+          body.minValidSampleRatio ?? jobConfig.current.minValidSampleRatio
         ),
         dedupStrategy:
           (body.dedupStrategy as JobConfig['dedupStrategy'] | undefined) ??
-          activeJobConfig.dedupStrategy,
+          jobConfig.current.dedupStrategy,
         malformedPolicy:
           (body.malformedPolicy as JobConfig['malformedPolicy'] | undefined) ??
-          activeJobConfig.malformedPolicy,
+          jobConfig.current.malformedPolicy,
         parquetCompression:
           (body.parquetCompression as JobConfig['parquetCompression'] | undefined) ??
-          activeJobConfig.parquetCompression,
+          jobConfig.current.parquetCompression,
         datasetVersion:
           typeof body.datasetVersion === 'string'
             ? body.datasetVersion
-            : activeJobConfig.datasetVersion,
+            : jobConfig.current.datasetVersion,
         partitionLayout:
           (body.partitionLayout as JobConfig['partitionLayout'] | undefined) ??
-          activeJobConfig.partitionLayout,
+          jobConfig.current.partitionLayout,
         lakehouseFormat:
           (body.lakehouseFormat as JobConfig['lakehouseFormat'] | undefined) ??
-          activeJobConfig.lakehouseFormat,
-        hotRetentionDays: Number(body.hotRetentionDays ?? activeJobConfig.hotRetentionDays),
-        coldRetentionDays: Number(body.coldRetentionDays ?? activeJobConfig.coldRetentionDays),
+          jobConfig.current.lakehouseFormat,
+        hotRetentionDays: Number(body.hotRetentionDays ?? jobConfig.current.hotRetentionDays),
+        coldRetentionDays: Number(body.coldRetentionDays ?? jobConfig.current.coldRetentionDays),
         coldStorageEndpoint:
           (body.coldStorageEndpoint as JobConfig['coldStorageEndpoint'] | undefined) ??
-          activeJobConfig.coldStorageEndpoint,
+          jobConfig.current.coldStorageEndpoint,
         compactionSchedule:
           (body.compactionSchedule as JobConfig['compactionSchedule'] | undefined) ??
-          activeJobConfig.compactionSchedule,
+          jobConfig.current.compactionSchedule,
         ingestTransport:
           (body.ingestTransport as JobConfig['ingestTransport'] | undefined) ??
-          activeJobConfig.ingestTransport,
+          jobConfig.current.ingestTransport,
       });
       res.status(201).json(snapshot);
     } catch (err) {
