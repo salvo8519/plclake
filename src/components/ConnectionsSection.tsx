@@ -181,6 +181,7 @@ export function ConnectionsSection({ plcCatalog, onBatchDispatched }: Connection
   const [host, setHost] = useState('192.168.10.15');
   const [port, setPort] = useState<number>(4840);
   const [endpointOrTopic, setEndpointOrTopic] = useState(PROTOCOL_DEFAULTS.opcua.endpointExample);
+  const [useTls, setUseTls] = useState(false);
   const [pollIntervalSec, setPollIntervalSec] = useState<1 | 2 | 5 | 10 | 30>(2);
   const [authMode, setAuthMode] = useState<ConnectionAuthMode>('x509-cert');
   const [tagBindings, setTagBindings] = useState<TagBinding[]>(() =>
@@ -292,6 +293,7 @@ export function ConnectionsSection({ plcCatalog, onBatchDispatched }: Connection
     setHost('192.168.10.20');
     setPort(4840);
     setEndpointOrTopic(PROTOCOL_DEFAULTS.opcua.endpointExample);
+    setUseTls(false);
     setPollIntervalSec(2);
     setAuthMode('x509-cert');
     setTagBindings(buildDefaultTags('plc-controller', 'opcua'));
@@ -309,6 +311,7 @@ export function ConnectionsSection({ plcCatalog, onBatchDispatched }: Connection
     setHost(conn.host);
     setPort(conn.port);
     setEndpointOrTopic(conn.endpointOrTopic);
+    setUseTls(conn.useTls);
     setPollIntervalSec(conn.pollIntervalSec);
     setAuthMode(conn.authMode);
     setTagBindings(conn.tagBindings.map((b) => ({ ...b })));
@@ -320,6 +323,7 @@ export function ConnectionsSection({ plcCatalog, onBatchDispatched }: Connection
     setProtocol(nextProto);
     setPort(PROTOCOL_DEFAULTS[nextProto].port);
     setEndpointOrTopic(PROTOCOL_DEFAULTS[nextProto].endpointExample);
+    setUseTls(nextProto === 'http-rest-meter' && PROTOCOL_DEFAULTS[nextProto].port === 443);
     setTagBindings(buildDefaultTags(machineType, nextProto, catalogProfile));
   };
 
@@ -352,6 +356,7 @@ export function ConnectionsSection({ plcCatalog, onBatchDispatched }: Connection
         host: host.trim(),
         port,
         endpointOrTopic: endpointOrTopic.trim(),
+        useTls: protocol === 'http-rest-meter' ? useTls : false,
         pollIntervalSec,
         authMode,
         enabled: true,
@@ -669,7 +674,11 @@ export function ConnectionsSection({ plcCatalog, onBatchDispatched }: Connection
             </label>
             <select
               id="net-auth-policy"
-              value={settingsDraft.requireGatewayToken ? 'strict' : 'trusted-lan'}
+              disabled={state?.authEnforcedByEnvironment === true}
+              aria-describedby={state?.authEnforcedByEnvironment ? 'net-auth-policy-locked' : undefined}
+              value={
+                settingsDraft.requireGatewayToken || state?.authEnforcedByEnvironment ? 'strict' : 'trusted-lan'
+              }
               onChange={(e) =>
                 setSettingsDraft({
                   ...settingsDraft,
@@ -681,6 +690,11 @@ export function ConnectionsSection({ plcCatalog, onBatchDispatched }: Connection
               <option value="trusted-lan">{t('operations:connections.fields.authTrustedLan')}</option>
               <option value="strict">{t('operations:connections.fields.authStrict')}</option>
             </select>
+            {state?.authEnforcedByEnvironment ? (
+              <p id="net-auth-policy-locked" className="mt-1 text-[11px] text-slate-500">
+                {t('operations:connections.fields.authLockedByEnvironment')}
+              </p>
+            ) : null}
           </div>
 
           <div>
@@ -1001,6 +1015,22 @@ export function ConnectionsSection({ plcCatalog, onBatchDispatched }: Connection
                   className={`${ERP_INPUT_COMPACT_CLASS} font-mono`}
                 />
               </div>
+              {protocol === 'http-rest-meter' ? (
+                <div className="sm:col-span-2">
+                  <label className="flex items-center gap-2 text-[11px] font-medium text-slate-700">
+                    <input
+                      type="checkbox"
+                      checked={useTls}
+                      onChange={(e) => setUseTls(e.target.checked)}
+                      aria-describedby="conn-use-tls-hint"
+                    />
+                    {t('operations:connections.drawer.useTls')}
+                  </label>
+                  <p id="conn-use-tls-hint" className="mt-1 text-[11px] text-slate-500">
+                    {t('operations:connections.drawer.useTlsHint')}
+                  </p>
+                </div>
+              ) : null}
               <div>
                 <label className="block text-[11px] font-medium text-slate-700 mb-1">
                   {t('operations:connections.drawer.transportPath')}

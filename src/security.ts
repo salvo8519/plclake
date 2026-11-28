@@ -3,6 +3,7 @@ import dns from 'node:dns/promises';
 import fs from 'node:fs/promises';
 import net from 'node:net';
 import path from 'node:path';
+import { isProductionRuntime } from './config/runtimeEnv.ts';
 import type { NextFunction, Request, Response } from 'express';
 
 export type ApiAuthScope = 'edge' | 'read' | 'admin';
@@ -402,6 +403,34 @@ export async function validateOutboundHost(
   return { allowed: true, addresses };
 }
 
+/** Interactive API reference (Scalar): loads its bundle from a CDN with inline bootstrap code. */
+const API_DOCS_PATH = /^\/api(?:\/v1)?\/docs(?:\/|$)/;
+
+/** JSON/CSV API responses never execute or embed anything. */
+export const API_CONTENT_SECURITY_POLICY = "default-src 'none'; frame-ancestors 'none'";
+
+/**
+ * Compiled SPA (production build has no inline scripts). Inline style attributes are used by
+ * React components; Google Fonts is the only third-party origin; any http(s) frame source is
+ * allowed for the admin-configured Mailpit inbox. No frame-ancestors: iframe embedding of the
+ * console is an intentional feature.
+ */
+export const APP_CONTENT_SECURITY_POLICY = [
+  "default-src 'self'",
+  "script-src 'self'",
+  "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+  "font-src 'self' https://fonts.gstatic.com data:",
+  "img-src 'self' data: blob:",
+  "connect-src 'self'",
+  "frame-src 'self' http: https:",
+  "object-src 'none'",
+  "base-uri 'self'",
+  "form-action 'self'",
+].join('; ');
+
+/** 180 days; no includeSubDomains, so on-prem sibling hosts without TLS are not affected. */
+export const HSTS_HEADER_VALUE = 'max-age=15552000';
+
 /**
  * Express middleware setting baseline HTTP security headers and strict CORS allowlist.
  * Preserves iframe embedding compatibility for preview environments while blocking MIME sniffing
@@ -411,6 +440,18 @@ export function securityHeadersMiddleware(req: Request, res: Response, next: Nex
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
   res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
+
+  // CSP only for production builds: the Vite dev server injects inline scripts.
+  if (isProductionRuntime() && !API_DOCS_PATH.test(req.path)) {
+    res.setHeader(
+      'Content-Security-Policy',
+      req.path.startsWith('/api/') ? API_CONTENT_SECURITY_POLICY : APP_CONTENT_SECURITY_POLICY
+    );
+  }
+  // HSTS only over TLS (req.secure honours TRUST_PROXY behind an ingress).
+  if (isProductionRuntime() && req.secure) {
+    res.setHeader('Strict-Transport-Security', HSTS_HEADER_VALUE);
+  }
 
   const corsOriginEnv = process.env.CORS_ORIGIN?.trim();
   const reqOrigin = req.header('origin');

@@ -116,6 +116,7 @@ export const PlcConnectionEntitySchema = z
     host: z.string(),
     port: z.number().int(),
     endpointOrTopic: z.string(),
+    useTls: z.boolean(),
     pollIntervalSec: z.number().int(),
     authMode: z.enum(AUTH_MODES),
     username: z.string().optional(),
@@ -147,6 +148,7 @@ export const ConnectionsStateResponseSchema = z
     settings: NetworkDeploymentSettingsSchema,
     connections: z.array(PlcConnectionEntitySchema),
     updatedAt: z.string(),
+    authEnforcedByEnvironment: z.boolean(),
   })
   .openapi('ConnectionsStateResponse');
 
@@ -166,6 +168,7 @@ export const ConnectionUpsertStrictSchema = z
       .regex(SLUG_ID_REGEX, 'Host must be a valid IPv4, hostname, or FQDN'),
     port: z.number().int().min(1).max(65535),
     endpointOrTopic: z.string().min(1).max(200),
+    useTls: z.boolean().optional(),
     pollIntervalSec: z.union([
       z.literal(1),
       z.literal(2),
@@ -196,6 +199,8 @@ export const ConnectionUpsertPermissiveSchema = z
     host: z.string().min(1).max(128).optional(),
     port: z.coerce.number().int().min(1).max(65535).optional(),
     endpointOrTopic: z.string().max(200).optional(),
+    useTls: z.boolean().optional(),
+    use_tls: z.boolean().optional(),
     pollIntervalSec: z.coerce.number().optional(),
     authMode: z.enum(AUTH_MODES).optional(),
     username: z.string().max(64).optional(),
@@ -687,6 +692,7 @@ export const EdgeConfigResponseSchema = z
         host: z.string(),
         port: z.number().int(),
         endpoint_or_topic: z.string(),
+        use_tls: z.boolean(),
         poll_interval_sec: z.number().int(),
         auth_mode: z.enum(AUTH_MODES),
         tag_bindings: z.array(

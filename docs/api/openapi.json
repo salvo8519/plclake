@@ -1088,6 +1088,9 @@
                 "endpoint_or_topic": {
                   "type": "string"
                 },
+                "use_tls": {
+                  "type": "boolean"
+                },
                 "poll_interval_sec": {
                   "type": "integer"
                 },
@@ -1137,6 +1140,7 @@
                 "host",
                 "port",
                 "endpoint_or_topic",
+                "use_tls",
                 "poll_interval_sec",
                 "auth_mode",
                 "tag_bindings"
@@ -1169,12 +1173,16 @@
           },
           "updatedAt": {
             "type": "string"
+          },
+          "authEnforcedByEnvironment": {
+            "type": "boolean"
           }
         },
         "required": [
           "settings",
           "connections",
-          "updatedAt"
+          "updatedAt",
+          "authEnforcedByEnvironment"
         ]
       },
       "NetworkDeploymentSettings": {
@@ -1271,6 +1279,9 @@
           "endpointOrTopic": {
             "type": "string"
           },
+          "useTls": {
+            "type": "boolean"
+          },
           "pollIntervalSec": {
             "type": "integer"
           },
@@ -1337,6 +1348,7 @@
           "host",
           "port",
           "endpointOrTopic",
+          "useTls",
           "pollIntervalSec",
           "authMode",
           "enabled",
@@ -1454,6 +1466,9 @@
             "type": "string",
             "minLength": 1,
             "maxLength": 200
+          },
+          "useTls": {
+            "type": "boolean"
           },
           "pollIntervalSec": {
             "anyOf": [
@@ -1597,6 +1612,12 @@
           "endpointOrTopic": {
             "type": "string",
             "maxLength": 200
+          },
+          "useTls": {
+            "type": "boolean"
+          },
+          "use_tls": {
+            "type": "boolean"
           },
           "pollIntervalSec": {
             "type": [

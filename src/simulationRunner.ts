@@ -97,6 +97,10 @@ interface InternalRun {
   /** Feature rows / anomalous windows already evicted from `windowBuckets`. */
   evictedFeatureRows: number;
   evictedAnomalousWindows: number;
+  /** Newest window start already evicted: older events would re-create a counted window. */
+  evictionWatermark: string | null;
+  /** Events dropped because their window was already evicted (too late to aggregate). */
+  lateEventsDropped: number;
   partitionSet: Set<string>;
   timer: ReturnType<typeof setInterval> | null;
   emitter: EventEmitter;
@@ -325,6 +329,8 @@ export class SimulationRunManager {
       windowBuckets: new Map<string, WindowBucket>(),
       evictedFeatureRows: 0,
       evictedAnomalousWindows: 0,
+      evictionWatermark: null,
+      lateEventsDropped: 0,
       partitionSet: new Set<string>(),
       timer: null,
       emitter: new EventEmitter(),
@@ -865,6 +871,12 @@ export class SimulationRunManager {
     const dt = winStart.slice(0, 10);
     const key = `${evt.machine_id}::${winStart}`;
     let bucket = run.windowBuckets.get(key);
+    if (!bucket && run.evictionWatermark !== null && winStart <= run.evictionWatermark) {
+      // The window was already folded into the cumulative counters: aggregating it again
+      // would count it twice. Record the drop instead of hiding it.
+      run.lateEventsDropped += 1;
+      return;
+    }
     if (!bucket) {
       bucket = {
         machineId: evt.machine_id,
@@ -1074,6 +1086,9 @@ export class SimulationRunManager {
       const row = this.materializeBucket(run, bucket);
       run.evictedFeatureRows += 1;
       run.evictedAnomalousWindows += row.is_anomalous_window;
+      if (run.evictionWatermark === null || bucket.windowStart > run.evictionWatermark) {
+        run.evictionWatermark = bucket.windowStart;
+      }
       run.windowBuckets.delete(key);
     }
   }
@@ -1143,6 +1158,7 @@ export class SimulationRunManager {
       validEventsCount: run.validEventsCount,
       quarantinedCount: run.quarantinedCount,
       outOfOrderCount: run.outOfOrderCount,
+      lateEventsDropped: run.lateEventsDropped,
       rotatedSegmentsCount: run.segSeq,
       highWatermarkIso: run.highWatermarkIso,
       expectedSampleSec: run.expectedSampleSec,

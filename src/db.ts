@@ -2,6 +2,9 @@ import { Pool, type QueryResult, type QueryResultRow } from 'pg';
 import { resolveSiteId } from './logger.ts';
 import type { AuditLogEntry, MlFeatureRow } from './types/pipeline.ts';
 
+/** Below this size an exact COUNT(*) is cheap; above it the planner estimate is used. */
+const EXACT_ROW_COUNT_THRESHOLD = 100_000;
+
 export interface QueryablePool {
   query<R extends QueryResultRow = QueryResultRow>(
     text: string,
@@ -535,6 +538,38 @@ export class DatabaseStore {
     }));
   }
 
+  /** Cheap liveness check for readiness probes: never scans application tables. */
+  async ping(): Promise<boolean> {
+    if (!this.isPostgresActive()) return false;
+    try {
+      await this.pool!.query('SELECT 1');
+      return true;
+    } catch (err) {
+      this.lastError = err instanceof Error ? err.message : 'PostgreSQL ping failed';
+      return false;
+    }
+  }
+
+  /**
+   * Row count of `ml_machine_features` for status and metrics. Uses the planner estimate
+   * (`pg_class.reltuples`, O(1)) once the table is large, and an exact COUNT(*) only below
+   * EXACT_ROW_COUNT_THRESHOLD, where it is cheap. A full scan on every scrape would grow with
+   * the table forever.
+   */
+  private async countFeatureRows(): Promise<number> {
+    const estimateRes = await this.pool!.query<{ estimate: string | null }>(
+      "SELECT reltuples::BIGINT::TEXT AS estimate FROM pg_class WHERE oid = to_regclass('ml_machine_features')"
+    );
+    const estimate = Number(estimateRes.rows[0]?.estimate ?? -1);
+    if (Number.isFinite(estimate) && estimate >= EXACT_ROW_COUNT_THRESHOLD) {
+      return Math.round(estimate);
+    }
+    const countRes = await this.pool!.query<{ total: string }>(
+      'SELECT COUNT(*)::TEXT AS total FROM ml_machine_features'
+    );
+    return Number(countRes.rows[0]?.total ?? 0);
+  }
+
   async getHealthStatus(): Promise<StorageHealthStatus> {
     if (!this.isPostgresActive()) {
       return {
@@ -547,14 +582,12 @@ export class DatabaseStore {
     }
 
     try {
-      const countRes = await this.pool!.query<{ total: string }>(
-        'SELECT COUNT(*)::TEXT AS total FROM ml_machine_features'
-      );
+      const featureRowsStored = await this.countFeatureRows();
       return {
         mode: 'postgres',
         connected: true,
         databaseHost: this.databaseHost,
-        featureRowsStored: Number(countRes.rows[0]?.total ?? 0),
+        featureRowsStored,
         lastError: null,
       };
     } catch (err) {

@@ -177,6 +177,8 @@ export interface LiveRunSnapshot {
   validEventsCount: number;
   quarantinedCount: number;
   outOfOrderCount: number;
+  /** Events whose aggregation window was already evicted from memory (late arrivals). */
+  lateEventsDropped: number;
   rotatedSegmentsCount: number;
   highWatermarkIso: string | null;
   expectedSampleSec: number;
@@ -268,6 +270,11 @@ export interface PlcConnection {
   host: string;
   port: number;
   endpointOrTopic: string;
+  /**
+   * HTTP REST meters: use HTTPS. Explicit, so TLS works on any port (e.g. 8443) and credentials
+   * are never sent in clear text by accident. Legacy records without it default to port === 443.
+   */
+  useTls: boolean;
   pollIntervalSec: 1 | 2 | 5 | 10 | 30;
   authMode: ConnectionAuthMode;
   username?: string;
@@ -309,6 +316,11 @@ export interface ConnectionsStateResponse {
   settings: NetworkDeploymentSettings;
   connections: PlcConnection[];
   updatedAt: string;
+  /**
+   * True when the runtime (production or API_ENFORCE_AUTH=true) enforces API authentication
+   * regardless of `settings.requireGatewayToken`: the "trusted LAN" option has no effect.
+   */
+  authEnforcedByEnvironment: boolean;
 }
 
 export interface OnPremDeployBundle {

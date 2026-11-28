@@ -11,6 +11,7 @@ import {
   type ApiAuthScope,
 } from './security.ts';
 import { isApiAuthEnforced } from './config/runtimeEnv.ts';
+import { fetchPinned } from './utils/outboundHttp.ts';
 import { atomicWriteJson } from './utils/persistence.ts';
 import type { DatabaseStore } from './db.ts';
 import type {
@@ -59,6 +60,7 @@ const DEFAULT_CONNECTIONS: PlcConnection[] = [
     host: '192.168.10.11',
     port: 4840,
     endpointOrTopic: 'opc.tcp://192.168.10.11:4840/UA/S71500',
+    useTls: false,
     pollIntervalSec: 2,
     authMode: 'x509-cert',
     enabled: true,
@@ -84,6 +86,7 @@ const DEFAULT_CONNECTIONS: PlcConnection[] = [
     host: '192.168.10.24',
     port: 502,
     endpointOrTopic: 'unit=1;hr=40001..40006',
+    useTls: false,
     pollIntervalSec: 5,
     authMode: 'anonymous',
     enabled: true,
@@ -109,6 +112,7 @@ const DEFAULT_CONNECTIONS: PlcConnection[] = [
     host: '10.20.40.12',
     port: 8883,
     endpointOrTopic: 'spBv1.0/plant01/DDATA/line-03/M-04',
+    useTls: false,
     pollIntervalSec: 5,
     authMode: 'username-password',
     username: 'ot_broker_ro',
@@ -250,6 +254,7 @@ export class ConnectionManager {
         tagBindings: c.tagBindings.map((b) => ({ ...b })),
       })),
       updatedAt: this.state.updatedAt,
+      authEnforcedByEnvironment: isApiAuthEnforced(false),
     };
   }
 
@@ -370,6 +375,7 @@ export class ConnectionManager {
         typeof raw.endpointOrTopic === 'string' && raw.endpointOrTopic.trim()
           ? raw.endpointOrTopic.trim().slice(0, 200)
           : existing?.endpointOrTopic ?? '/',
+      useTls: typeof raw.useTls === 'boolean' ? raw.useTls : existing?.useTls ?? port === 443,
       pollIntervalSec,
       authMode,
       username:
@@ -615,14 +621,14 @@ export class ConnectionManager {
 
     if (conn.protocol === 'http-rest-meter') {
       try {
-        const scheme = conn.port === 443 ? 'https' : 'http';
+        const scheme = conn.useTls ? 'https' : 'http';
         const suffix = conn.endpointOrTopic.startsWith('/') ? conn.endpointOrTopic : `/${conn.endpointOrTopic}`;
         const url = `${scheme}://${conn.host}:${conn.port}${suffix}`;
-        const resp = await fetch(url, {
-          method: 'GET',
-          redirect: 'error',
-          signal: AbortSignal.timeout(2500),
-        });
+        const resp = await fetchPinned(
+          url,
+          { method: 'GET', redirect: 'error', signal: AbortSignal.timeout(2500) },
+          hostCheck.addresses
+        );
         reachable = resp.status < 500;
         if (!reachable) {
           errorCode = `HTTP_${resp.status}`;
@@ -697,6 +703,7 @@ export class ConnectionManager {
       host: c.host,
       port: c.port,
       endpoint_or_topic: c.endpointOrTopic,
+      use_tls: c.useTls,
       poll_interval_sec: c.pollIntervalSec,
       auth_mode: c.authMode,
       tag_bindings: c.tagBindings.map((b) => ({

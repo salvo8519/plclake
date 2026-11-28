@@ -298,5 +298,66 @@ class HttpMeterTokenTests(unittest.TestCase):
                 urlopen.assert_not_called()
 
 
+class HttpMeterSchemeTests(unittest.TestCase):
+    def _requested_url(self, **kwargs: object) -> str:
+        import contextlib
+        import json as _json
+        from unittest import mock
+
+        from edge_gateway.drivers import poll_http_rest_meter
+
+        response = mock.MagicMock()
+        response.read.return_value = _json.dumps({"value": 1}).encode()
+        response.__enter__.return_value = response
+        with mock.patch("urllib.request.urlopen", return_value=response) as urlopen:
+            # Only the requested URL matters: response parsing errors are irrelevant here.
+            with contextlib.suppress(Exception):
+                poll_http_rest_meter(
+                    "10.0.0.5", kwargs.pop("port"), "/data", "anonymous", [], **kwargs
+                )  # type: ignore[arg-type]
+            request = urlopen.call_args[0][0]
+            return request.full_url if hasattr(request, "full_url") else str(request)
+
+    def test_explicit_tls_uses_https_on_any_port(self) -> None:
+        self.assertTrue(
+            self._requested_url(port=8443, use_tls=True).startswith("https://10.0.0.5:8443/")
+        )
+
+    def test_explicit_plain_http_is_respected_even_on_443(self) -> None:
+        self.assertTrue(
+            self._requested_url(port=443, use_tls=False).startswith("http://10.0.0.5:443/")
+        )
+
+    def test_legacy_config_without_flag_keeps_port_443_rule(self) -> None:
+        self.assertTrue(self._requested_url(port=443).startswith("https://"))
+        self.assertTrue(self._requested_url(port=8080).startswith("http://"))
+
+    def test_connection_spec_reads_use_tls_from_console_config(self) -> None:
+        from edge_gateway.collector import parse_connections_payload
+
+        _, specs = parse_connections_payload(
+            {
+                "connections": [
+                    {
+                        "id": "c1",
+                        "machine_id": "M-1",
+                        "protocol": "http-rest-meter",
+                        "host": "h",
+                        "port": 8443,
+                        "use_tls": True,
+                    },
+                    {
+                        "id": "c2",
+                        "machine_id": "M-2",
+                        "protocol": "http-rest-meter",
+                        "host": "h",
+                        "port": 443,
+                    },
+                ]
+            }
+        )
+        self.assertEqual([s.use_tls for s in specs], [True, None])
+
+
 if __name__ == "__main__":
     unittest.main()

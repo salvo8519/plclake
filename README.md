@@ -10,7 +10,7 @@
 <p align="center">
   <img src="https://img.shields.io/badge/Release-v1.0.0-C9A45C?style=flat-square&labelColor=0B1622" alt="Release" />
   <img src="https://img.shields.io/badge/OpenAPI-3.1.0%20%C2%B7%2051%20endpoints-16324F?style=flat-square&labelColor=0B1622" alt="OpenAPI" />
-  <img src="https://img.shields.io/badge/i18n-EN%20%7C%20IT%20%C2%B7%201203%20keys-C9A45C?style=flat-square&labelColor=0B1622" alt="i18n" />
+  <img src="https://img.shields.io/badge/i18n-EN%20%7C%20IT%20%C2%B7%201206%20keys-C9A45C?style=flat-square&labelColor=0B1622" alt="i18n" />
   <img src="https://img.shields.io/badge/Zensical%20Docs-8%C3%972%20EN%2FIT%20pages-16324F?style=flat-square&labelColor=0B1622" alt="Docs" />
   <img src="https://img.shields.io/badge/CI%20Gate-ESLint%20%C2%B7%20Biome%20%C2%B7%20Ruff%20%C2%B7%20Vitest-0F6B54?style=flat-square&labelColor=0B1622" alt="CI Gate" />
   <br />
