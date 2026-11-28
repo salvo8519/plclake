@@ -1,4 +1,4 @@
-import type { Express, Request, Response, Router } from 'express';
+import express, { type Express, type Request, type Response, type Router } from 'express';
 import { generateOpenApiSpec } from '../../apiSchemas.ts';
 import {
   API_CONTRACT,
@@ -9,6 +9,7 @@ import {
 import { resolveSiteId } from '../../logger.ts';
 import { metricsRegistry } from '../../observability.ts';
 import { extractRequestCredential } from '../../security.ts';
+import { forwardAsyncErrors } from '../../utils/asyncRouter.ts';
 import { getRequestContext, resolveRequestLanguage } from '../requestInput.ts';
 import type { HttpContext } from '../context.ts';
 
@@ -86,9 +87,12 @@ export function registerProbeRoutes(
 ): void {
   const { dbStore, jobConfig } = ctx;
   const { isShuttingDown, servePrometheusMetrics } = lifecycle;
+  // Same guarantee as the API router: a rejected async handler reaches the JSON error handler
+  // instead of becoming an unhandled rejection (which terminates the process).
+  const probes = forwardAsyncErrors(express.Router());
 
   // Kubernetes / Docker liveness probe (always 200 while event loop is alive)
-  app.get('/healthz', (_req, res) => {
+  probes.get('/healthz', (_req, res) => {
     res.status(200).json({
       status: 'alive',
       name: APP_NAME,
@@ -100,7 +104,7 @@ export function registerProbeRoutes(
   });
 
   // Kubernetes / Docker readiness probe (returns 503 during graceful shutdown)
-  app.get('/readyz', async (_req, res) => {
+  probes.get('/readyz', async (_req, res) => {
     if (isShuttingDown()) {
       res.status(503).json({
         status: 'shutting_down',
@@ -135,7 +139,7 @@ export function registerProbeRoutes(
   });
 
   // Top-level deployment version endpoint (mirrors GET /api/v1/version)
-  app.get('/version', (_req, res) => {
+  probes.get('/version', (_req, res) => {
     res.setHeader('Cache-Control', 'no-store');
     res.json(
       buildRuntimeVersionInfo({
@@ -145,9 +149,9 @@ export function registerProbeRoutes(
     );
   });
 
-  app.get('/metrics', (req, res) => {
-    void servePrometheusMetrics(req, res);
-  });
+  probes.get('/metrics', (req, res) => servePrometheusMetrics(req, res));
+
+  app.use(probes);
 }
 
 /** API-wide middleware (version headers, audit trail of every write) and service endpoints. */
@@ -222,9 +226,7 @@ export function registerApiBaseRoutes(apiRouter: Router, ctx: HttpContext): void
 
 /** API Prometheus alias and the strict JSON 404 for unmatched API routes (registered last). */
 export function registerApiTailRoutes(apiRouter: Router, servePrometheusMetrics: PrometheusMetricsHandler): void {
-  apiRouter.get('/metrics', (req, res) => {
-    void servePrometheusMetrics(req, res);
-  });
+  apiRouter.get('/metrics', (req, res) => servePrometheusMetrics(req, res));
 
   // Strict JSON 404 fallback for unmatched API routes (never fall through to SPA HTML)
   apiRouter.use((req, res) => {
