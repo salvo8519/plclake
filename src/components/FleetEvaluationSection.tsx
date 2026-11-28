@@ -42,12 +42,14 @@ export function FleetEvaluationSection({ liveRun }: FleetEvaluationSectionProps)
   const [lineFilter, setLineFilter] = useState<string>('ALL');
   const [currentPage, setCurrentPage] = useState(1);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: a new run id is the trigger; filters reset for each run.
   useEffect(() => {
     setSearchQuery('');
     setLineFilter('ALL');
     setCurrentPage(1);
   }, [liveRun?.runId]);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: the filters are the trigger; pagination resets whenever they change.
   useEffect(() => {
     setCurrentPage(1);
   }, [searchQuery, lineFilter]);
@@ -195,7 +197,7 @@ export function FleetEvaluationSection({ liveRun }: FleetEvaluationSectionProps)
   const fleetSummary = useMemo(() => {
     const anomalousMachines = rollups.filter((r) => r.anomalousWindows > 0).length;
     const totalLeadAlerts = rollups.reduce((sum, r) => sum + r.leadFailWindows, 0);
-    const peakTemp = rollups.reduce((max, r) => (r.tempPeak > max ? r.tempPeak : max), 0);
+    const peakTemp = rollups.reduce((max, r) => Math.max(r.tempPeak, max), 0);
     const domainCount = new Set(rollups.map((r) => r.domain)).size;
     return {
       machinesTracked: rollups.length,

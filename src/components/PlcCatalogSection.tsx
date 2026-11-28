@@ -153,6 +153,7 @@ export function PlcCatalogSection({
       return true;
     }), [profiles, domainFilter, searchQuery]);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: the filters are the trigger; pagination resets whenever they change.
   useEffect(() => {
     setCurrentPage(1);
   }, [searchQuery, domainFilter]);

@@ -483,3 +483,30 @@ describe('Metrics endpoints never leave a rejected promise unhandled', () => {
     }
   });
 });
+
+describe('Generated on-premise deploy bundle', () => {
+  it('ships no default credentials, keeps DB credentials off the edge gateway and binds ports locally', async () => {
+    const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'telemetry-bundle-'));
+    const manager = new ConnectionManager(tmpDir);
+    await manager.init();
+    const bundle = manager.buildDeployBundle();
+    const everything = JSON.stringify(bundle);
+
+    expect(everything).not.toMatch(/change_me|mlops_local_dev/);
+    expect(bundle.onPremComposeYml).toContain('POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?');
+    expect(bundle.edgeEnvFile).not.toMatch(/DATABASE_URL|postgres:\/\//);
+    const publishedPorts = bundle.onPremComposeYml.match(/^\s+- "[^"]*:\d+"$/gm) ?? [];
+    expect(publishedPorts.length).toBeGreaterThan(0);
+    for (const line of publishedPorts) {
+      // Docker Compose ${VAR} syntax inside the generated file, not a JavaScript template.
+      // biome-ignore lint/suspicious/noTemplateCurlyInString: compose variable syntax under test.
+      expect(line).toContain('${PLCLAKE_BIND_ADDR:-127.0.0.1}:'); // eslint-disable-line no-template-curly-in-string
+    }
+    expect(bundle.onPremComposeYml).not.toContain(':latest');
+
+    if (process.env.BUNDLE_DUMP_DIR) {
+      await fs.writeFile(path.join(process.env.BUNDLE_DUMP_DIR, 'onprem.yml'), bundle.onPremComposeYml);
+    }
+    await fs.rm(tmpDir, { recursive: true, force: true });
+  });
+});

@@ -407,8 +407,8 @@ export function selectTypesForProfileMode(
       const pwr = allProfiles.filter((p) => p.domain === 'power-generation').map((p) => p.typeId);
       return pwr.length > 0 ? pwr : ['power-meter', 'turbine-generator'];
     }
-    case 'mixed':
     default:
+      // 'mixed' (and any unknown mode): a representative cross-domain fleet.
       return ['plc-controller', 'siemens-s7-1500', 'cnc-mill', 'gas-flow-meter', 'power-meter'].filter(
         (id) => liveCatalogMap.has(id)
       );

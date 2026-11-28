@@ -11,7 +11,7 @@
     "preview": "vite preview",
     "clean": "rm -rf dist dist-server server.js site",
     "lint": "tsc --noEmit",
-    "lint:code": "biome lint src server.ts scripts tests",
+    "lint:code": "biome lint --error-on-warnings src server.ts scripts tests",
     "lint:eslint": "eslint src server.ts scripts tests",
     "lint:eslint:fix": "eslint --fix src server.ts scripts tests",
     "lint:fix": "biome check --write src server.ts scripts tests && eslint --fix src server.ts scripts tests",

@@ -672,12 +672,12 @@ export class AlertEngine {
       : [...this.state.smtp.recipients];
 
     const subject =
-      options?.subject && options.subject.trim()
+      options?.subject?.trim()
         ? options.subject.trim().slice(0, 160)
         : `[Industrial Telemetry] SMTP Diagnostic Test (${sentAt.slice(11, 19)} UTC)`;
 
     const textBody =
-      options?.body && options.body.trim()
+      options?.body?.trim()
         ? options.body.trim().slice(0, 4000)
         : `Diagnostic test email dispatched at ${sentAt}.\nConfigured SMTP relay: ${this.state.smtp.host}:${this.state.smtp.port} (TLS=${this.state.smtp.secure ? 'implicit' : 'plain/starttls'}).`;
 

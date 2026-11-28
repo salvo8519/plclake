@@ -16,7 +16,7 @@ export function getSessionApiKey(): string | null {
 }
 
 export function setSessionApiKey(token: string | null): void {
-  inMemorySessionApiKey = token && token.trim() ? token.trim() : null;
+  inMemorySessionApiKey = token?.trim() ? token.trim() : null;
   if (typeof window !== 'undefined') {
     try {
       window.sessionStorage.removeItem(LEGACY_SESSION_KEY_STORAGE);

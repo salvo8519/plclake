@@ -115,7 +115,7 @@ export function timingSafeStringEqual(a: string, b: string): boolean {
  * Constant-time check comparing a plaintext candidate against a stored hex SHA-256 hash.
  */
 export function timingSafeHashMatch(candidate: string, expectedSha256Hex: string): boolean {
-  if (!expectedSha256Hex || expectedSha256Hex.length !== 64) return false;
+  if (expectedSha256Hex?.length !== 64) return false;
   const actualBuf = Buffer.from(sha256Hex(candidate), 'hex');
   let expectedBuf: Buffer;
   try {
@@ -133,11 +133,11 @@ export function extractRequestCredential(req: Request): string {
     return authHeader.replace(/^Bearer\s+/i, '').trim();
   }
   const apiKey = req.header('x-api-key');
-  if (apiKey && apiKey.trim()) {
+  if (apiKey?.trim()) {
     return apiKey.trim();
   }
   const gatewayToken = req.header('x-gateway-token');
-  if (gatewayToken && gatewayToken.trim()) {
+  if (gatewayToken?.trim()) {
     return gatewayToken.trim();
   }
   return '';

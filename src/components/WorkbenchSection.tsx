@@ -311,10 +311,12 @@ export function WorkbenchSection({
     }
   }, [liveRun?.runId]);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: the filters are the trigger; pagination resets whenever they change.
   useEffect(() => {
     setLogsPage(1);
   }, [logLevelFilter, logSearchQuery]);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: the filters are the trigger; pagination resets whenever they change.
   useEffect(() => {
     setFeaturesPage(1);
   }, [machineQuery, anomalyFilter]);

@@ -548,7 +548,7 @@ export class AuthAuditManager {
     password: string;
   }): Promise<UserAccountPublic> {
     const email = input.email.trim().toLowerCase();
-    if (!email || !email.includes('@')) {
+    if (!email?.includes('@')) {
       throw new Error('Valid email address is required.');
     }
     if (!input.password || input.password.length < MIN_USER_PASSWORD_LENGTH) {
@@ -696,7 +696,7 @@ export class AuthAuditManager {
   }
 
   resolveSessionToken(token: string): SessionUserInfo | null {
-    if (!token || !token.startsWith('sess_')) return null;
+    if (!token?.startsWith('sess_')) return null;
     const tokenHash = sha256(token);
     const sess = this.sessions.get(tokenHash);
     if (!sess) return null;
@@ -722,7 +722,7 @@ export class AuthAuditManager {
     if (process.env.TRUST_PROXY_AUTH_HEADERS !== 'true') return null;
     const emailRaw = headers['x-auth-request-email'] || headers['x-forwarded-email'];
     const email = Array.isArray(emailRaw) ? emailRaw[0] : emailRaw;
-    if (!email || !email.includes('@')) return null;
+    if (!email?.includes('@')) return null;
 
     const normalized = email.trim().toLowerCase();
     const matched = this.users.find((u) => u.email === normalized && u.active);
@@ -960,7 +960,7 @@ export class AuthAuditManager {
     if (!owner) {
       owner = this.users.find((u) => u.role === 'admin' && u.active) ?? this.users[0];
     }
-    if (!owner || !owner.active) {
+    if (!owner?.active) {
       throw new Error('Target owner account does not exist or is disabled.');
     }
 
@@ -1106,7 +1106,7 @@ export class AuthAuditManager {
   }
 
   resolveApiToken(rawToken: string, clientIp?: string): ResolvedApiTokenResult {
-    if (!rawToken || !rawToken.startsWith('pat_live_')) {
+    if (!rawToken?.startsWith('pat_live_')) {
       return { authorized: false, deniedReason: 'invalid' };
     }
 
@@ -1129,7 +1129,7 @@ export class AuthAuditManager {
     }
 
     const owner = this.users.find((u) => u.id === matched.ownerUserId);
-    if (!owner || !owner.active) {
+    if (!owner?.active) {
       return { authorized: false, deniedReason: 'owner_disabled', record: toPublicApiToken(matched) };
     }
 
