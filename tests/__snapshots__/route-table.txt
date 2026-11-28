@@ -3,10 +3,11 @@ USE expressInit /^\/?(?=\/|$)/i
 USE securityHeadersMiddleware /^\/?(?=\/|$)/i
 USE jsonParser /^\/?(?=\/|$)/i
 USE <anonymous> /^\/?(?=\/|$)/i
-GET /healthz  [<anonymous>]
-GET /readyz  [<anonymous>]
-GET /version  [<anonymous>]
-GET /metrics  [<anonymous>]
+ROUTER /^\/?(?=\/|$)/i
+  GET /healthz  [anonymous]
+  GET /readyz  [anonymous]
+  GET /version  [anonymous]
+  GET /metrics  [anonymous]
 USE <anonymous> /^\/api\/v1\/docs\/?(?=\/|$)/i
 USE <anonymous> /^\/api\/docs\/?(?=\/|$)/i
 GET /docs  [<anonymous>]

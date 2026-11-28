@@ -456,3 +456,30 @@ describe('HTTP meter TLS flag (useTls)', () => {
     expect(byId).toMatchObject({ 'legacy-443': true, 'legacy-8080': false });
   });
 });
+
+describe('Metrics endpoints never leave a rejected promise unhandled', () => {
+  it('turns a failing metrics build into a JSON 500 on both /metrics and /api/v1/metrics', async () => {
+    const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'telemetry-metrics-failure-'));
+    const created = await createApp({ rootDir: tmpDir, mountFrontend: false });
+    const failing = created.dbStore as unknown as { getHealthStatus: () => Promise<never> };
+    failing.getHealthStatus = async () => {
+      throw new Error('storage exploded');
+    };
+    const unhandled: unknown[] = [];
+    const onUnhandled = (reason: unknown) => unhandled.push(reason);
+    process.on('unhandledRejection', onUnhandled);
+    try {
+      for (const url of ['/metrics', '/api/v1/metrics']) {
+        const res = await request(created.app).get(url).timeout(3000);
+        expect(res.status).toBe(500);
+        expect(JSON.stringify(res.body)).not.toContain('storage exploded');
+      }
+      await new Promise((resolve) => setImmediate(resolve));
+      expect(unhandled).toEqual([]);
+    } finally {
+      process.off('unhandledRejection', onUnhandled);
+      await created.drainPendingWrites();
+      await fs.rm(tmpDir, { recursive: true, force: true });
+    }
+  });
+});
