@@ -5,10 +5,6 @@ import { apiReference } from '@scalar/express-api-reference';
 import {
   ConnectionUpsertPermissiveSchema,
   ConnectionUpsertStrictSchema,
-  IngestBatchPermissiveSchema,
-  IngestBatchStrictSchema,
-  JobConfigPermissiveSchema,
-  JobConfigStrictSchema,
   NetworkSettingsPermissiveSchema,
   NetworkSettingsStrictSchema,
   PipelineRunCreatePermissiveSchema,
@@ -57,7 +53,6 @@ import {
   getRequestContext,
   normalizePermissiveConnectionInput,
   logInternalError,
-  normalizePermissiveEvent,
   resolveRequestLanguage,
 } from './src/http/requestInput.ts';
 import { JobConfigStore } from './src/http/jobConfigStore.ts';
@@ -66,6 +61,7 @@ import type { HttpContext } from './src/http/context.ts';
 import { registerAuthRoutes } from './src/http/routes/auth.ts';
 import { registerAlertRoutes } from './src/http/routes/alerts.ts';
 import { registerCatalogRoutes } from './src/http/routes/catalog.ts';
+import { registerIngestionRoutes } from './src/http/routes/ingestion.ts';
 // ROUTER_IMPORTS
 import {
   collectProductionConfigErrors,
@@ -353,143 +349,7 @@ export async function createApp(options: CreateAppOptions = {}) {
 
   registerCatalogRoutes(apiRouter, ctx);
 
-  apiRouter.get('/edge/config', requireScope('edge'), (_req, res) => {
-    res.json(connectionManager.getEdgeSyncConfig());
-  });
-
-  apiRouter.get('/job/config', requireScope('read'), (_req, res) => {
-    res.json({
-      config: jobConfig.current,
-      updatedAt: jobConfig.updatedAt,
-    });
-  });
-
-  apiRouter.put('/job/config', requireScope('admin'), async (req, res) => {
-    const { requestId, tier } = getRequestContext(req, res);
-    try {
-      const schema = tier === 'strict' ? JobConfigStrictSchema : JobConfigPermissiveSchema;
-      const parsed = schema.safeParse(req.body ?? {});
-      if (!parsed.success) {
-        res.status(400).json({
-          error: `Validation failed (${tier})`,
-          tier,
-          requestId,
-          issues: formatZodIssues(parsed.error),
-        });
-        return;
-      }
-
-      await jobConfig.update(parsed.data as Partial<JobConfig>);
-      res.json({
-        config: jobConfig.current,
-        updatedAt: jobConfig.updatedAt,
-      });
-    } catch (err) {
-      logInternalError(err, 'Unable to save job configuration', requestId);
-      res.status(500).json({
-        error: 'Unable to save job configuration',
-        tier,
-        requestId,
-      });
-    }
-  });
-
-  apiRouter.post('/ingest/batch', ingestRateLimit, requireScope('edge'), async (req, res) => {
-    const { requestId, tier } = getRequestContext(req, res);
-    try {
-
-      let rawEvents: unknown[];
-      if (tier === 'strict') {
-        const parsed = IngestBatchStrictSchema.safeParse(req.body ?? {});
-        if (!parsed.success) {
-          res.status(400).json({
-            error: 'Validation failed (Tier 2 Strict)',
-            tier,
-            requestId,
-            issues: formatZodIssues(parsed.error),
-          });
-          return;
-        }
-        rawEvents = parsed.data.events;
-      } else {
-        const parsed = IngestBatchPermissiveSchema.safeParse(req.body ?? {});
-        if (!parsed.success) {
-          res.status(400).json({
-            error: 'Request body must include a non-empty events array or single event object.',
-            tier,
-            requestId,
-            issues: formatZodIssues(parsed.error),
-          });
-          return;
-        }
-        const sourceList = parsed.data.events ?? (parsed.data.event !== undefined ? [parsed.data.event] : []);
-        rawEvents = sourceList.map(normalizePermissiveEvent);
-      }
-
-      if (rawEvents.length > 5000) {
-        res.status(413).json({
-          error: 'Batch size exceeds 5,000 events per request.',
-          tier,
-          requestId,
-        });
-        return;
-      }
-
-      const result = runManager.ingestExternalBatch(rawEvents, {
-        windowMinutes: jobConfig.current.windowMinutes,
-        machinesPerLine: jobConfig.current.machinesPerLine,
-        machineProfileMode: jobConfig.current.machineProfileMode,
-        rotateMaxLines: jobConfig.current.rotateMaxLines,
-        customMachineTopology: jobConfig.current.customMachineTopology,
-        ignoredErrorCodes: jobConfig.current.ignoredErrorCodes,
-        horizonWindows: jobConfig.current.horizonWindows,
-        tempAnomalyThresholdC: jobConfig.current.tempAnomalyThresholdC,
-        vibrationP95Threshold: jobConfig.current.vibrationP95Threshold,
-        minValidSampleRatio: jobConfig.current.minValidSampleRatio,
-        dedupStrategy: jobConfig.current.dedupStrategy,
-        malformedPolicy: jobConfig.current.malformedPolicy,
-        parquetCompression: jobConfig.current.parquetCompression,
-        datasetVersion: jobConfig.current.datasetVersion,
-        partitionLayout: jobConfig.current.partitionLayout,
-        lakehouseFormat: jobConfig.current.lakehouseFormat,
-        hotRetentionDays: jobConfig.current.hotRetentionDays,
-        coldRetentionDays: jobConfig.current.coldRetentionDays,
-        coldStorageEndpoint: jobConfig.current.coldStorageEndpoint,
-        compactionSchedule: jobConfig.current.compactionSchedule,
-        ingestTransport: jobConfig.current.ingestTransport,
-      });
-
-      const countsByMachine = new Map<string, number>();
-      if (result.accepted > 0) {
-        for (const item of rawEvents) {
-          if (item && typeof item === 'object' && !Array.isArray(item)) {
-            const mId = (item as Record<string, unknown>).machine_id;
-            if (typeof mId === 'string' && mId.trim()) {
-              countsByMachine.set(mId.trim(), (countsByMachine.get(mId.trim()) ?? 0) + 1);
-            }
-          }
-        }
-        await connectionManager.recordIngestedMachineCounts(countsByMachine);
-      }
-
-      metricsRegistry.recordIngestionBatch(result.accepted, result.quarantined);
-      logger.info('ingestion', 'Processed external telemetry batch', {
-        requestId,
-        accepted: result.accepted,
-        quarantined: result.quarantined,
-        validationTier: tier,
-      });
-
-      res.status(202).json(result);
-    } catch (err) {
-      logInternalError(err, 'Batch ingestion failed', requestId);
-      res.status(500).json({
-        error: 'Batch ingestion failed',
-        tier,
-        requestId,
-      });
-    }
-  });
+  registerIngestionRoutes(apiRouter, ctx);
 
   apiRouter.get('/connections', requireScope('read'), (_req, res) => {
     res.json(connectionManager.getPublicState());
