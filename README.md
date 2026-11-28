@@ -130,7 +130,7 @@ flowchart LR
 - **Live Telemetry & Simulation Console**: Monitor incoming machine streams, pipeline health (`Stable`, `Degraded`, `Critical`), raw JSON payloads, quarantined anomalies, and fleet KPIs in real time.
 - **Plant Connections & Edge Gateway**: Connect factory assets via **OPC-UA**, **Modbus TCP**, **MQTT Sparkplug**, or **HTTP/REST** over direct LAN, Site-to-Site VPN, or an offline-resilient Edge Gateway with SQLite store-and-forward buffering and generated 1-click on-premise install kits.
 - **Dynamic PLC Catalog & Job Policy**: Define industrial machine families (Siemens, Rockwell, CNC, Gas, Power) and tune aggregation windows, event-time watermarks, quarantine policies, and Hot/Cold Lakehouse retention straight from the UI.
-- **Security, API Tokens & Immutable Audit Log**: Manage Users and RBAC roles (`Admin`, `Operator`, `Viewer`), issue scoped `X-API-Key` credentials (`read`, `edge`, `admin`) with TTL tracking and rotation, encrypt secrets at rest, and export an immutable audit trail of every operational action.
+- **Security, API Tokens & Immutable Audit Log**: Manage Users and RBAC roles (`Admin`, `Operator`, `Viewer`), issue scoped `X-API-Key` credentials (`read`, `edge`, `admin`) with TTL tracking and rotation, encrypt secrets at rest, and export an immutable audit trail of every operational action. Production fails closed: mandatory authentication, no default credentials, SSRF protection with DNS pinning, CSP/HSTS headers.
 - **Bilingual by Design (`EN | IT`) & Production Ready**: Synchronized English/Italian console, live Scalar OpenAPI portal, Zensical documentation site, hardened non-root Docker image, on-premise Compose bundle, and Kubernetes/k3s Helm chart.
 
 ---
@@ -140,6 +140,8 @@ flowchart LR
 - **Zero Over-Engineering**: PostgreSQL 16 + PgBouncer for fast recent queries ("Hot" tier) paired with compressed Parquet on S3 ("Cold" tier) — no Kafka or Spark clusters to maintain on-site.
 - **Contract-First APIs**: 51 OpenAPI 3.1 endpoints generated directly from Zod schemas, with two-tier validation (`permissive` for resilient ingestion, `strict` for integrations) and interactive [Scalar OpenAPI 3.1 Reference](https://salvo8519.github.io/plclake/api/scalar.html?lang=en).
 - **Production Observability**: Built-in `/healthz`, `/readyz`, `/api/v1/version`, Prometheus `/metrics`, redacted structured JSON logs, and pre-provisioned Grafana dashboards.
+- **Modular, Verifiable HTTP Layer**: `server.ts` is a small composition root; each domain (auth, alerts, catalog, ingestion, connections, analytics, pipeline, docs) is a router in `src/http/routes/`. A route-table snapshot test doubles as an authorization map, so a route that loses its protection fails CI.
+- **Reproducible Builds**: committed `package-lock.json` (`npm ci`) and a hash-verified Python lock; CI runs `npm audit` and `pip-audit`.
 
 Deep-dive technical guides are published on the **[Live Documentation Site](https://salvo8519.github.io/plclake/en/)** and mirrored in the [Documentation Hub](docs/index.md).
 
@@ -156,13 +158,24 @@ npm run hooks:install
 npm run dev
 ```
 
+No password is hard-coded. Set `AUTH_ADMIN_PASSWORD` in `.env`, or leave it empty: on first boot a random password is written once to `.state/initial-credentials.txt`. Set `AUTH_SEED_DEMO_USERS=true` to also create the operator and viewer demo accounts (never created in production).
+
 ### Production Stack with Docker
 
-Launches **PLCLake + PostgreSQL 16 + Mailpit + Prometheus + Grafana** in one command:
+Launches **PLCLake + PostgreSQL 16 + Mailpit + Prometheus + Grafana** in one command. The stack runs in production mode, so it refuses to start until these values are set in `.env`:
+
+```bash
+AUTH_ADMIN_PASSWORD=<at least 12 characters>
+SECRETS_ENCRYPTION_KEY=$(openssl rand -hex 32)
+POSTGRES_PASSWORD=<strong password>
+GRAFANA_ADMIN_PASSWORD=<strong password>
+```
 
 ```bash
 docker compose up -d --build
 ```
+
+Only the console (port `3000`) is published on every interface. PostgreSQL, Mailpit, Prometheus and Grafana listen on `127.0.0.1`; set `PLCLAKE_BIND_ADDR` to open them on a specific network address.
 
 | Service | URL |
 | :--- | :--- |
@@ -171,6 +184,8 @@ docker compose up -d --build
 | **Interactive API Docs (EN)** | `http://localhost:3000/api/v1/docs?lang=en` |
 | **Interactive API Docs (IT)** | `http://localhost:3000/api/v1/docs?lang=it` |
 | **Prometheus Metrics** | `http://localhost:3000/api/v1/metrics` |
+| **Grafana** | `http://localhost:3001` |
+| **Mailpit Inbox** | `http://localhost:8025` |
 
 For customer server installations or Staging/Production clusters, see:
 - **[On-Premise & Air-Gapped Docker Deployment](deploy/onprem/README.md)**
@@ -204,6 +219,10 @@ npm run verify         # Full pre-push gate (TypeScript, ESLint, Biome, i18n, Vi
 npm test               # Automated security, RBAC, token lifecycle, DB & API integration tests
 npm run sync:badges    # Sync config/app.json version across package.json, Helm Chart & README badges
 npm run docs:openapi   # Export static EN/IT OpenAPI 3.1 specs
+
+# Python edge gateway, simulator and dataset builder (exact, hash-verified versions)
+pip install --require-hashes -r project_repo/machine-logs-ml-pipeline/src/requirements-lock.txt
+PYTHONPATH=project_repo/machine-logs-ml-pipeline/src pytest project_repo/machine-logs-ml-pipeline/tests
 ```
 
 ---

@@ -14,7 +14,7 @@
     "lint:code": "biome lint --error-on-warnings src server.ts scripts tests",
     "lint:eslint": "eslint src server.ts scripts tests",
     "lint:eslint:fix": "eslint --fix src server.ts scripts tests",
-    "lint:fix": "biome check --write src server.ts scripts tests && eslint --fix src server.ts scripts tests",
+    "lint:fix": "biome lint --write src server.ts scripts tests && eslint --fix src server.ts scripts tests",
     "format": "biome format --write src server.ts scripts tests",
     "audit:deps": "npm audit --omit=dev --audit-level=high",
     "test": "vitest run",

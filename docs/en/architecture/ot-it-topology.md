@@ -28,4 +28,4 @@ The Edge Collector (`src/edge_gateway/collector.py`) normalizes four protocol fa
 - **OPC-UA (`opcua`, port `4840`)**: Siemens S7-1500, Rockwell ControlLogix, Beckhoff, B&R (`asyncua`).
 - **Modbus TCP (`modbus-tcp`, port `502`)**: gas flow meters, compressors, power analyzers (`pymodbus`, `HR:40001` notation with `scale_factor`).
 - **MQTT Sparkplug B (`mqtt-sparkplug`, port `8883`)**: OT brokers with asynchronous subscriptions (`paho-mqtt`).
-- **HTTP/REST Smart Meter (`http-rest-meter`, port `8080/443`)**: smart metering endpoints exposing JSON payloads.
+- **HTTP/REST Smart Meter (`http-rest-meter`, port `8080/443`)**: smart metering endpoints exposing JSON payloads. HTTPS is selected explicitly per connection (**Use HTTPS (TLS)**, any port such as `8443`); a meter bearer token is never sent over plain HTTP.

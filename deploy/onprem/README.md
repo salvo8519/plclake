@@ -26,6 +26,17 @@ openssl rand -hex 32
 docker compose up -d
 ```
 
+The stack runs in production mode and fails closed: `docker compose up` stops with an explicit message until the required values in `.env` are set.
+
+| Variable | Requirement |
+| :--- | :--- |
+| `AUTH_ADMIN_PASSWORD` | Initial administrator, at least 12 characters (no default account password exists). |
+| `SECRETS_ENCRYPTION_KEY` | 64 hex characters (`openssl rand -hex 32`); keep it stable, it decrypts stored API tokens and alert secrets. |
+| `POSTGRES_PASSWORD` | Database password shared by PostgreSQL, PgBouncer, backups and the app. |
+| `GRAFANA_ADMIN_PASSWORD` | Only with `--profile observability`. |
+
+`TRUST_PROXY=1` is preset because Caddy is the only client of the app container: rate limits and the audit log then record real client IPs. Change it only if another proxy sits in front of Caddy.
+
 Verify deployment version & readiness:
 
 ```bash

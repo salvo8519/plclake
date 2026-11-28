@@ -19,3 +19,5 @@ __pycache__/
 *.log
 .env*
 !.env.example
+# Committed templates such as deploy/onprem/.env.onprem.example
+!.env*.example

@@ -88,6 +88,9 @@ env:
   DATABASE_SSL: "true"
   DATABASE_POOL_MAX: "20"
   API_ENFORCE_AUTH: "true"
+  # Express trust proxy. Keep "false" when the Service is exposed directly; set "1" behind one
+  # ingress controller (see values-staging/prod) so rate limits and audit see real client IPs.
+  TRUST_PROXY: "false"
   METRICS_AUTH_REQUIRED: "false"
   SCALAR_CDN_URL: ""
   CORS_ORIGIN: ""

@@ -27,6 +27,7 @@
   },
   "javascript": {
     "formatter": {
+      "enabled": false,
       "quoteStyle": "single",
       "semicolons": "always",
       "trailingCommas": "es5"

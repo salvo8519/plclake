@@ -14,6 +14,7 @@ env:
   PLANT_SITE_ID: plant-prod-01
   LOG_LEVEL: info
   API_ENFORCE_AUTH: "true"
+  TRUST_PROXY: "1" # one hop: the nginx ingress controller
   DATABASE_SSL: "true"
   DATABASE_POOL_MAX: "25"
   METRICS_AUTH_REQUIRED: "false"
