@@ -24,7 +24,6 @@ import {
 } from './src/apiSchemas.ts';
 import {
   LANGUAGE_COOKIE_NAME,
-  normalizeLanguage,
   type SupportedLanguage,
 } from './src/i18n/types.ts';
 import { AlertEngine } from './src/alertEngine.ts';
@@ -63,7 +62,9 @@ import { createJsonErrorHandler, forwardAsyncErrors } from './src/utils/asyncRou
 import {
   getRequestContext,
   normalizePermissiveConnectionInput,
+  logInternalError,
   normalizePermissiveEvent,
+  resolveRequestLanguage,
 } from './src/http/requestInput.ts';
 import { JobConfigStore } from './src/http/jobConfigStore.ts';
 import { createAuthGuards } from './src/http/authGuards.ts';
@@ -264,19 +265,6 @@ export async function createApp(options: CreateAppOptions = {}) {
 
   const { resolveActor, requireScope } = createAuthGuards({ authAuditManager, connectionManager });
 
-  /**
-   * Unexpected failures inside a handler: full detail goes to the server log (correlated by
-   * requestId); the client only gets the handler's generic message, never internal paths,
-   * driver errors or stack traces.
-   */
-  const logInternalError = (err: unknown, context: string, requestId: string | null): void => {
-    logger.error('system', context, {
-      requestId,
-      error: err instanceof Error ? err.message : String(err),
-      stack: err instanceof Error ? err.stack : undefined,
-    });
-  };
-
   const apiRouter = forwardAsyncErrors(express.Router());
 
   apiRouter.use((req, res, next) => {
@@ -308,19 +296,6 @@ export async function createApp(options: CreateAppOptions = {}) {
     }
     next();
   });
-
-  const resolveRequestLanguage = (req: Request): SupportedLanguage => {
-    const queryLang = typeof req.query.lang === 'string' ? req.query.lang : null;
-    if (queryLang) return normalizeLanguage(queryLang);
-    const cookieHeader = req.headers.cookie ?? '';
-    const cookieMatch = cookieHeader.match(new RegExp(`(?:^|;\\s*)${LANGUAGE_COOKIE_NAME}=([^;]+)`));
-    if (cookieMatch) return normalizeLanguage(decodeURIComponent(cookieMatch[1]));
-    const acceptLang = req.headers['accept-language'];
-    if (typeof acceptLang === 'string' && acceptLang.trim()) {
-      return normalizeLanguage(acceptLang);
-    }
-    return 'en';
-  };
 
   apiRouter.get('/openapi.json', (req, res) => {
     const lang = resolveRequestLanguage(req);

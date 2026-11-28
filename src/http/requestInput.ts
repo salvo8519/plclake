@@ -1,5 +1,7 @@
 import crypto from 'node:crypto';
 import type { Request, Response } from 'express';
+import { LANGUAGE_COOKIE_NAME, normalizeLanguage, type SupportedLanguage } from '../i18n/types.ts';
+import { logger } from '../logger.ts';
 import { resolveValidationTier } from '../apiSchemas.ts';
 import type { PlcConnection } from '../types/pipeline.ts';
 
@@ -67,3 +69,29 @@ export function normalizePermissiveConnectionInput(raw: Record<string, unknown>)
 }
 
 // WHITE_LABEL_EDITORIAL_CSS imported from src/serverConfig.ts
+
+/**
+ * Unexpected failures inside a handler: full detail goes to the server log (correlated by
+ * requestId); the client only gets the handler's generic message, never internal paths,
+ * driver errors or stack traces.
+ */
+export const logInternalError = (err: unknown, context: string, requestId: string | null): void => {
+  logger.error('system', context, {
+    requestId,
+    error: err instanceof Error ? err.message : String(err),
+    stack: err instanceof Error ? err.stack : undefined,
+  });
+};
+
+export const resolveRequestLanguage = (req: Request): SupportedLanguage => {
+  const queryLang = typeof req.query.lang === 'string' ? req.query.lang : null;
+  if (queryLang) return normalizeLanguage(queryLang);
+  const cookieHeader = req.headers.cookie ?? '';
+  const cookieMatch = cookieHeader.match(new RegExp(`(?:^|;\\s*)${LANGUAGE_COOKIE_NAME}=([^;]+)`));
+  if (cookieMatch) return normalizeLanguage(decodeURIComponent(cookieMatch[1]));
+  const acceptLang = req.headers['accept-language'];
+  if (typeof acceptLang === 'string' && acceptLang.trim()) {
+    return normalizeLanguage(acceptLang);
+  }
+  return 'en';
+};
