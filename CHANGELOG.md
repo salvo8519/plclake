@@ -21,6 +21,12 @@ Hardening release (issue #2). No new features.
 - Deduplication keeps remembering recent events across its size limit (two-generation set instead of `clear()`).
 - Edge spool: batches permanently rejected (HTTP 400/422) move to a dead-letter table instead of blocking all later telemetry; HTTP 413 splits the batch.
 
+### Build and supply chain
+- Reproducible builds: committed `package-lock.json` (npm is the only Node package manager; the unused `bun.lock` was removed). CI, GitLab CI and the Dockerfile use `npm ci`, with npm caching in GitHub Actions.
+- Python dependencies pinned with hashes in `project_repo/machine-logs-ml-pipeline/src/requirements-lock.txt`; CI and the Python Dockerfile install with `--require-hashes`. `ruff` and `pip-audit` are pinned as dev dependencies.
+- CI now runs every Python test file, including the simulator and dataset builder tests, plus a `pip-audit` vulnerability check.
+- Renovate refreshes the npm lockfile weekly and tracks `pyproject.toml`.
+
 ### Changed (action required on upgrade)
 - Production boot requires `AUTH_ADMIN_PASSWORD` (min 12 characters) and `SECRETS_ENCRYPTION_KEY`; the root `docker-compose.yml` now requires them and `GRAFANA_ADMIN_PASSWORD`.
 - New `TRUST_PROXY` setting: set it when running behind an ingress so rate limits and audit logs see real client IPs.

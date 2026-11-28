@@ -27,10 +27,11 @@ jobs:
         uses: actions/setup-node@v6
         with:
           node-version: "22"
+          cache: npm
 
       - name: Install Node dependencies, export OpenAPI 3.1 & validate i18n/docs
         run: |
-          if [ -f package-lock.json ]; then npm ci --no-audit --no-fund --ignore-scripts; else npm install --no-audit --no-fund --ignore-scripts; fi
+          npm ci --no-audit --no-fund --ignore-scripts
           npm run docs:openapi
           npm run check:i18n
 

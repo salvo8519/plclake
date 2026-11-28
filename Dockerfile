@@ -7,12 +7,9 @@
 FROM node:22-alpine AS deps
 WORKDIR /app
 
-COPY package.json package-lock.json* .npmrc* ./
-RUN if [ -f package-lock.json ]; then \
-      npm ci --no-audit --no-fund --ignore-scripts; \
-    else \
-      npm install --no-audit --no-fund --ignore-scripts; \
-    fi
+# The committed lockfile is mandatory: npm ci fails if it is missing or out of sync.
+COPY package.json package-lock.json .npmrc* ./
+RUN npm ci --no-audit --no-fund --ignore-scripts
 
 # ── Stage 2: Build static SPA bundle + compiled Express ESM server ─────────────
 FROM deps AS builder
@@ -28,12 +25,8 @@ RUN npm run build && npm run build:server
 FROM node:22-alpine AS prod-deps
 WORKDIR /app
 
-COPY package.json package-lock.json* .npmrc* ./
-RUN if [ -f package-lock.json ]; then \
-      npm ci --omit=dev --no-audit --no-fund --ignore-scripts; \
-    else \
-      npm install --omit=dev --no-audit --no-fund --ignore-scripts; \
-    fi
+COPY package.json package-lock.json .npmrc* ./
+RUN npm ci --omit=dev --no-audit --no-fund --ignore-scripts
 
 # ── Stage 4: Hardened non-root production runtime ──────────────────────────────
 FROM node:22-alpine AS runner

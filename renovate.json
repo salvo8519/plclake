@@ -11,6 +11,10 @@
   ],
   "prConcurrentLimit": 3,
   "prHourlyLimit": 2,
+  "lockFileMaintenance": {
+    "enabled": true,
+    "schedule": ["before 08:00 on Monday"]
+  },
   "vulnerabilityAlerts": {
     "enabled": true,
     "labels": ["security"],
@@ -25,7 +29,7 @@
     },
     {
       "description": "Group Python & Docker non-major updates weekly",
-      "matchManagers": ["pip_requirements", "dockerfile", "docker-compose"],
+      "matchManagers": ["pip_requirements", "pep621", "dockerfile", "docker-compose"],
       "matchUpdateTypes": ["minor", "patch"],
       "groupName": "python & docker non-major dependencies"
     }

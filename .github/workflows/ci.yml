@@ -26,9 +26,10 @@ jobs:
         uses: actions/setup-node@v6
         with:
           node-version: "22"
+          cache: npm
 
-      - name: Install dependencies
-        run: npm install --no-audit --no-fund
+      - name: Install dependencies (locked)
+        run: npm ci --no-audit --no-fund
 
       - name: TypeScript typecheck
         run: npm run lint
@@ -63,18 +64,22 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: Install pytest & ruff
-        run: pip install --no-cache-dir pytest ruff
+      - name: Install locked Python dependencies (hash-verified)
+        run: |
+          pip install --no-cache-dir --require-hashes \
+            -r project_repo/machine-logs-ml-pipeline/src/requirements-lock.txt
+
+      - name: Python dependency vulnerability audit
+        run: |
+          pip-audit --require-hashes --disable-pip \
+            -r project_repo/machine-logs-ml-pipeline/src/requirements-lock.txt
 
       - name: Ruff lint & format check
         run: |
           ruff check project_repo/
           ruff format --check project_repo/
 
-      - name: Run Edge Collector & Modbus TCP / HTTP Virtual PLC tests
+      - name: Run Python tests (edge gateway, virtual PLC bench, simulator & dataset builder)
         env:
           PYTHONPATH: project_repo/machine-logs-ml-pipeline/src
-        run: |
-          pytest -v \
-            project_repo/machine-logs-ml-pipeline/tests/test_edge_drivers.py \
-            project_repo/machine-logs-ml-pipeline/tests/test_edge_gateway.py
+        run: pytest -v project_repo/machine-logs-ml-pipeline/tests

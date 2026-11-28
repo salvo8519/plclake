@@ -151,7 +151,7 @@ Tutti gli approfondimenti tecnici sono pubblicati sul **[Sito Documentazione Liv
 
 ```bash
 cp .env.example .env
-npm install
+npm ci
 npm run hooks:install
 npm run dev
 ```
