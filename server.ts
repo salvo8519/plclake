@@ -2,20 +2,13 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import express from 'express';
 import { AlertEngine } from './src/alertEngine.ts';
-import {
-  AuthAuditManager,
-} from './src/authAudit.ts';
+import { AuthAuditManager } from './src/authAudit.ts';
 import { ConnectionManager } from './src/connectionManager.ts';
 import { DatabaseStore } from './src/db.ts';
 import { createHttpLoggerMiddleware, logger, resolveSiteId } from './src/logger.ts';
-import {
-  PlcCatalogManager,
-} from './src/machineCatalog.ts';
+import { PlcCatalogManager } from './src/machineCatalog.ts';
 import { metricsRegistry } from './src/observability.ts';
-import {
-  createRateLimiter,
-  securityHeadersMiddleware,
-} from './src/security.ts';
+import { createRateLimiter, securityHeadersMiddleware } from './src/security.ts';
 import { SimulationRunManager } from './src/simulationRunner.ts';
 import { flushPendingWrites } from './src/utils/persistence.ts';
 import { createJsonErrorHandler, forwardAsyncErrors } from './src/utils/asyncRouter.ts';
@@ -36,7 +29,6 @@ import {
   registerProbeRoutes,
 } from './src/http/routes/system.ts';
 import { registerDocsRoutes } from './src/http/routes/docs.ts';
-// ROUTER_IMPORTS
 import {
   collectProductionConfigErrors,
   isProductionRuntime,
@@ -45,8 +37,6 @@ import {
 
 const PORT = Number(process.env.PORT) || 3000;
 const DEFAULT_ROOT_DIR = process.cwd();
-
-// Job config & editorial CSS extracted to src/serverConfig.ts for modularity.
 
 export interface CreateAppOptions {
   rootDir?: string;
@@ -127,24 +117,17 @@ export async function createApp(options: CreateAppOptions = {}) {
   const servePrometheusMetrics = createPrometheusMetricsHandler(ctx);
   registerProbeRoutes(app, ctx, { isShuttingDown: () => isShuttingDown, servePrometheusMetrics });
 
+  // Domain routers. Registration order is part of the contract (base middleware first, JSON 404
+  // last) and is pinned by tests/route_table.test.ts.
   const apiRouter = forwardAsyncErrors(express.Router());
-
   registerApiBaseRoutes(apiRouter, ctx);
-
   registerAuthRoutes(apiRouter, ctx);
-
   registerAlertRoutes(apiRouter, ctx);
-
   registerCatalogRoutes(apiRouter, ctx);
-
   registerIngestionRoutes(apiRouter, ctx);
-
   registerConnectionRoutes(apiRouter, ctx);
-
   registerAnalyticsRoutes(apiRouter, ctx);
-
   registerPipelineRoutes(apiRouter, ctx);
-
   registerApiTailRoutes(apiRouter, servePrometheusMetrics);
 
   registerDocsRoutes(app, ctx);
