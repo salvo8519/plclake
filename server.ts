@@ -59,13 +59,14 @@ import {
 } from './src/serverConfig.ts';
 import { SimulationRunManager } from './src/simulationRunner.ts';
 import { flushPendingWrites, sanitizeCsvCell } from './src/utils/persistence.ts';
-import { createJsonErrorHandler, forwardAsyncErrors, withName } from './src/utils/asyncRouter.ts';
+import { createJsonErrorHandler, forwardAsyncErrors } from './src/utils/asyncRouter.ts';
 import {
   getRequestContext,
   normalizePermissiveConnectionInput,
   normalizePermissiveEvent,
 } from './src/http/requestInput.ts';
 import { JobConfigStore } from './src/http/jobConfigStore.ts';
+import { createAuthGuards } from './src/http/authGuards.ts';
 import {
   collectProductionConfigErrors,
   isProductionRuntime,
@@ -261,135 +262,7 @@ export async function createApp(options: CreateAppOptions = {}) {
   const runCreateRateLimit = createRateLimiter({ windowMs: 60_000, maxRequests: 30, keyPrefix: 'run-create' });
   const loginRateLimit = createRateLimiter({ windowMs: 60_000, maxRequests: 20, keyPrefix: 'login' });
 
-  const resolveActor = (req: Request): {
-    actor: string;
-    actorRole: string;
-    sessionUser: ReturnType<AuthAuditManager['resolveSessionToken']>;
-    tokenId?: string;
-  } => {
-    const credential = extractRequestCredential(req);
-    const sessionUser =
-      authAuditManager.resolveSessionToken(credential) ??
-      authAuditManager.resolveOidcProxyHeaders(req.headers);
-    if (sessionUser) {
-      return { actor: sessionUser.email, actorRole: sessionUser.role, sessionUser };
-    }
-    if (credential.startsWith('pat_live_')) {
-      const tokRes = authAuditManager.resolveApiToken(credential);
-      if (tokRes.authorized && tokRes.record) {
-        return {
-          actor: `token:${tokRes.record.name} (${tokRes.record.ownerEmail})`,
-          actorRole: tokRes.record.ownerRole,
-          sessionUser: tokRes.ownerUser ?? null,
-          tokenId: tokRes.record.id,
-        };
-      }
-    }
-    const apiScope = connectionManager.resolveCredentialScope(credential);
-    if (apiScope) {
-      return { actor: `api-key:${apiScope}`, actorRole: apiScope, sessionUser: null };
-    }
-    return { actor: 'console-anonymous', actorRole: 'anonymous', sessionUser: null };
-  };
-
-  const requireScope = (scope: ApiAuthScope) =>
-    withName((req: Request, res: Response, next: express.NextFunction) => {
-    const { requestId, tier } = getRequestContext(req, res);
-    const credential = extractRequestCredential(req);
-
-    // 1. Human session token (sess_...) or trusted OIDC proxy headers
-    const sessionUser =
-      authAuditManager.resolveSessionToken(credential) ??
-      authAuditManager.resolveOidcProxyHeaders(req.headers);
-    if (sessionUser) {
-      const granted = roleToApiScope(sessionUser.role);
-      const allowed = granted === 'admin' || granted === scope;
-      if (!allowed) {
-        res.status(403).json({
-          error: `Role '${sessionUser.role}' lacks required '${scope}' scope.`,
-          tier,
-          requestId,
-        });
-        return;
-      }
-      res.setHeader('X-Auth-Scope', granted);
-      res.setHeader('X-Auth-User', sessionUser.email);
-      next();
-      return;
-    }
-
-    // 2. Managed Encrypted-at-Rest API Keys (pat_live_... via X-API-Key or Authorization: Bearer)
-    if (credential.startsWith('pat_live_')) {
-      const clientIp = req.ip || req.socket.remoteAddress || undefined;
-      const resolved = authAuditManager.resolveApiToken(credential, clientIp);
-      if (!resolved.authorized || !resolved.record || !resolved.scopes) {
-        const reason = resolved.deniedReason ?? 'invalid';
-        logger.warn('security', `API token rejected (${reason})`, {
-          event: 'token.auth_denied',
-          reason,
-          requiredScope: scope,
-          tokenId: resolved.record?.id ?? null,
-          tokenPrefix: resolved.record?.tokenPrefix ?? null,
-          path: req.originalUrl,
-          requestId,
-        });
-        res.status(401).json({
-          error:
-            reason === 'revoked'
-              ? 'API key has been revoked.'
-              : reason === 'expired'
-              ? 'API key has expired.'
-              : reason === 'owner_disabled'
-              ? 'API key owner account is disabled.'
-              : 'Invalid API key.',
-          tier,
-          requestId,
-        });
-        return;
-      }
-
-      const hasScope = resolved.scopes.includes('admin') || resolved.scopes.includes(scope);
-      if (!hasScope) {
-        logger.warn('security', `API token insufficient scope (${scope} required)`, {
-          event: 'token.scope_denied',
-          requiredScope: scope,
-          grantedScopes: resolved.scopes,
-          tokenId: resolved.record.id,
-          tokenPrefix: resolved.record.tokenPrefix,
-          ownerEmail: resolved.record.ownerEmail,
-          path: req.originalUrl,
-          requestId,
-        });
-        res.status(403).json({
-          error: `API key '${resolved.record.name}' lacks required '${scope}' scope (granted: ${resolved.scopes.join(', ')}).`,
-          tier,
-          requestId,
-        });
-        return;
-      }
-
-      const effectiveScope: ApiAuthScope = resolved.scopes.includes('admin') ? 'admin' : scope;
-      res.setHeader('X-Auth-Scope', effectiveScope);
-      res.setHeader('X-Auth-User', resolved.record.ownerEmail);
-      res.setHeader('X-Auth-Token-Id', resolved.record.id);
-      next();
-      return;
-    }
-
-    // 3. Gateway Machine-to-Machine API Keys (adm_live_, bi_live_, gw_live_)
-    const auth = connectionManager.authorizeRequest(scope, credential);
-    if (!auth.authorized) {
-      const status = auth.grantedScope !== 'anonymous' ? 403 : 401;
-      res.status(status).json({
-        error: auth.reason ?? 'Unauthorized API credential',
-        tier,
-        requestId,
-      });
-      return;
-    }
-    res.setHeader('X-Auth-Scope', auth.grantedScope);
-    next();
-    }, `requireScope(${scope})`);
+  const { resolveActor, requireScope } = createAuthGuards({ authAuditManager, connectionManager });
 
   /**
    * Unexpected failures inside a handler: full detail goes to the server log (correlated by
