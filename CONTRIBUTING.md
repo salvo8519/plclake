@@ -15,8 +15,8 @@ Thank you for your interest in contributing. This repository is maintained as an
 ## Local Development Setup
 
 ```bash
-# 1. Install Node.js dependencies
-npm install
+# 1. Install Node.js dependencies (exact versions from package-lock.json)
+npm ci
 
 # 2. Copy environment template
 cp .env.example .env
@@ -30,6 +30,14 @@ Optional local services (PostgreSQL, Mailpit, Prometheus, Grafana):
 ```bash
 docker compose up -d
 ```
+
+## Dependency Management
+
+Builds are reproducible: CI and Docker install only from committed lockfiles.
+
+- **Node.js (npm)**: `package-lock.json` is the single source of truth. Install with `npm ci`; add or upgrade a package with `npm install <pkg>@<version>` and commit both `package.json` and `package-lock.json`. Run `npm audit` before opening the PR.
+- **Python** (`project_repo/machine-logs-ml-pipeline/src`): `pyproject.toml` declares ranges, `requirements-lock.txt` pins exact versions with hashes. After editing `pyproject.toml`, regenerate the lock with the `uv pip compile` command written at the top of the lock file and commit both files. Install locally with `pip install --require-hashes -r requirements-lock.txt`.
+- Renovate opens grouped update PRs every Monday and refreshes `package-lock.json` (lock file maintenance).
 
 ## Verification Checklist Before Opening a PR
 

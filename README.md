@@ -151,7 +151,7 @@ Deep-dive technical guides are published on the **[Live Documentation Site](http
 
 ```bash
 cp .env.example .env
-npm install
+npm ci
 npm run hooks:install
 npm run dev
 ```

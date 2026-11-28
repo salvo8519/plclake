@@ -27,7 +27,7 @@ quality:node:
   image: node:${NODE_VERSION}-alpine
   extends: .node_cache
   script:
-    - npm install --no-audit --no-fund
+    - npm ci --no-audit --no-fund
     - npm run lint
     - npm run lint:eslint
     - npm run lint:code
@@ -37,7 +37,7 @@ quality:python-ruff:
   stage: quality
   image: python:${PYTHON_VERSION}-slim
   script:
-    - pip install --no-cache-dir ruff
+    - pip install --no-cache-dir --require-hashes -r project_repo/machine-logs-ml-pipeline/src/requirements-lock.txt
     - ruff check project_repo/
     - ruff format --check project_repo/
 
@@ -46,7 +46,7 @@ security:dependency-audit:
   image: node:${NODE_VERSION}-alpine
   extends: .node_cache
   script:
-    - npm install --no-audit --no-fund
+    - npm ci --no-audit --no-fund
     - npm run audit:deps
   allow_failure: false
 
@@ -55,7 +55,7 @@ test:vitest:
   image: node:${NODE_VERSION}-alpine
   extends: .node_cache
   script:
-    - npm install --no-audit --no-fund
+    - npm ci --no-audit --no-fund
     - npm test
 
 test:python-edge:
@@ -64,15 +64,16 @@ test:python-edge:
   variables:
     PYTHONPATH: project_repo/machine-logs-ml-pipeline/src
   script:
-    - pip install --no-cache-dir pytest
-    - pytest -v project_repo/machine-logs-ml-pipeline/tests/test_edge_drivers.py
+    - pip install --no-cache-dir --require-hashes -r project_repo/machine-logs-ml-pipeline/src/requirements-lock.txt
+    - pip-audit --require-hashes --disable-pip -r project_repo/machine-logs-ml-pipeline/src/requirements-lock.txt
+    - pytest -v project_repo/machine-logs-ml-pipeline/tests
 
 build:frontend:
   stage: build
   image: node:${NODE_VERSION}-alpine
   extends: .node_cache
   script:
-    - npm install --no-audit --no-fund
+    - npm ci --no-audit --no-fund
     - npm run build
     - npm run build:server
   artifacts:
