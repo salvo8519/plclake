@@ -130,7 +130,7 @@ flowchart LR
 - **Console Operativa & Simulazione Live**: monitora i flussi telemetrici in tempo reale, lo stato di salute della pipeline (`Stabile`, `Degradata`, `Critica`), i payload JSON completi, i dati in quarantena e lo stato della flotta.
 - **Connessioni Impianto & Edge Gateway**: integra PLC e contatori industriali via **OPC-UA**, **Modbus TCP**, **MQTT Sparkplug** o **HTTP/REST** in LAN diretta, VPN Site-to-Site o tramite Edge Gateway con buffer offline SQLite e generazione automatica del kit di installazione on-premise.
 - **Catalogo PLC Dinamico & Configurazione Job**: definisci nuove famiglie di macchine (Siemens, Rockwell, CNC, Gas, Energia) e regola da interfaccia finestre di aggregazione, watermark, policy di quarantena e retention Hot/Cold.
-- **Sicurezza, Token API & Registro Audit Immutabile**: gestione separata di Utenti e Ruoli (`Admin`, `Operatore`, `Visualizzatore`), chiavi `X-API-Key` con scope dedicati (`read`, `edge`, `admin`), scadenza e rotazione automatica, segreti cifrati a riposo e registro Audit esportabile in CSV.
+- **Sicurezza, Token API & Registro Audit Immutabile**: gestione separata di Utenti e Ruoli (`Admin`, `Operatore`, `Visualizzatore`), chiavi `X-API-Key` con scope dedicati (`read`, `edge`, `admin`), scadenza e rotazione automatica, segreti cifrati a riposo e registro Audit esportabile in CSV. In produzione il sistema è fail-closed: autenticazione obbligatoria, nessuna credenziale predefinita, protezione SSRF con DNS pinning, header CSP/HSTS.
 - **Nativamente Bilingue (`IT | EN`) & Pronto per la Produzione**: console web, portale API Scalar live, sito documentazione Zensical, immagine Docker non-root, pacchetto on-premise chiavi in mano e Helm Chart per k3s/Kubernetes.
 
 ---
@@ -140,6 +140,8 @@ flowchart LR
 - **Zero Over-Engineering**: PostgreSQL 16 + PgBouncer per query operative istantanee ("Hot") abbinato ad archivio compresso Parquet su S3 ("Cold") — nessun cluster Kafka o Spark da mantenere in stabilimento.
 - **API Contract-First**: 51 endpoint OpenAPI 3.1 generati direttamente da schemi Zod, con validazione a due livelli (`permissive` per resilienza in fabbrica, `strict` per integrazioni enterprise) e [Portale Interattivo Scalar OpenAPI 3.1](https://salvo8519.github.io/plclake/api/scalar.html?lang=it).
 - **Osservabilità Nativa**: endpoint `/healthz`, `/readyz`, `/api/v1/version`, metriche Prometheus `/metrics`, log JSON strutturati con redaction dei segreti e dashboard Grafana preconfigurate.
+- **Livello HTTP Modulare e Verificabile**: `server.ts` è una piccola radice di composizione; ogni dominio (auth, alert, catalogo, ingestion, connessioni, analytics, pipeline, documentazione) è un router in `src/http/routes/`. Un test di snapshot della tabella delle rotte funge da mappa delle autorizzazioni: una rotta che perde la propria protezione fa fallire la CI.
+- **Build Riproducibili**: `package-lock.json` versionato (`npm ci`) e lock Python verificato con hash; la CI esegue `npm audit` e `pip-audit`.
 
 Tutti gli approfondimenti tecnici sono pubblicati sul **[Sito Documentazione Live](https://salvo8519.github.io/plclake/it/)** e raccolti nell'[Hub Documentazione](docs/index.md).
 
@@ -156,13 +158,24 @@ npm run hooks:install
 npm run dev
 ```
 
+Nessuna password è scritta nel codice. Imposta `AUTH_ADMIN_PASSWORD` in `.env`, oppure lasciala vuota: al primo avvio una password casuale viene scritta una sola volta in `.state/initial-credentials.txt`. Imposta `AUTH_SEED_DEMO_USERS=true` per creare anche gli account demo operatore e visualizzatore (mai creati in produzione).
+
 ### Stack Completo con Docker
 
-Avvia **PLCLake + PostgreSQL 16 + Mailpit + Prometheus + Grafana** con un solo comando:
+Avvia **PLCLake + PostgreSQL 16 + Mailpit + Prometheus + Grafana** con un solo comando. Lo stack gira in modalità produzione, quindi non si avvia finché questi valori non sono impostati in `.env`:
+
+```bash
+AUTH_ADMIN_PASSWORD=<almeno 12 caratteri>
+SECRETS_ENCRYPTION_KEY=$(openssl rand -hex 32)
+POSTGRES_PASSWORD=<password robusta>
+GRAFANA_ADMIN_PASSWORD=<password robusta>
+```
 
 ```bash
 docker compose up -d --build
 ```
+
+Solo la console (porta `3000`) è pubblicata su tutte le interfacce. PostgreSQL, Mailpit, Prometheus e Grafana ascoltano su `127.0.0.1`; imposta `PLCLAKE_BIND_ADDR` per aprirli su uno specifico indirizzo di rete.
 
 | Servizio | URL |
 | :--- | :--- |
@@ -171,6 +184,8 @@ docker compose up -d --build
 | **Documentazione API Interattiva (IT)** | `http://localhost:3000/api/v1/docs?lang=it` |
 | **Documentazione API Interattiva (EN)** | `http://localhost:3000/api/v1/docs?lang=en` |
 | **Metriche Prometheus** | `http://localhost:3000/api/v1/metrics` |
+| **Grafana** | `http://localhost:3001` |
+| **Casella Mailpit** | `http://localhost:8025` |
 
 Per il rilascio su server cliente o ambienti Staging/Produzione:
 - **[Guida Deploy On-Premise & Air-Gapped (Docker)](deploy/onprem/README.md)**
@@ -204,6 +219,10 @@ npm run verify         # Controllo completo pre-push (TypeScript, ESLint, Biome,
 npm test               # Test automatici su sicurezza, RBAC, ciclo di vita token, DB e API
 npm run sync:badges    # Allinea la versione di config/app.json su package.json, Helm Chart e badge README
 npm run docs:openapi   # Esporta le specifiche statiche OpenAPI 3.1 EN/IT
+
+# Gateway edge, simulatore e dataset builder Python (versioni esatte verificate con hash)
+pip install --require-hashes -r project_repo/machine-logs-ml-pipeline/src/requirements-lock.txt
+PYTHONPATH=project_repo/machine-logs-ml-pipeline/src pytest project_repo/machine-logs-ml-pipeline/tests
 ```
 
 ---

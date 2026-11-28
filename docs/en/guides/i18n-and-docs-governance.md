@@ -16,8 +16,8 @@ This platform is engineered for **zero-drift, low-overhead maintenance** (includ
 ```bash
 npm run hooks:install  # One-time setup: activate Husky (.husky/pre-commit) + lint-staged locally
 npm run lint:eslint    # ESLint (Airbnb style guide + React/Hooks/a11y/TS) on frontend & backend
-npm run lint:code      # Biome: ultra-fast Rust linter & formatter check (frontend + backend TS/React/JSON/CSS)
-npm run lint:fix       # Auto-fix formatting & lint issues (Biome + ESLint Airbnb)
+npm run lint:code      # Biome linter (frontend + backend); any warning fails the gate
+npm run lint:fix       # Auto-fix lint issues (Biome lint + ESLint); ESLint is the TS/TSX style authority
 npm run lint           # TypeScript strict typecheck (tsc --noEmit)
 npm run docs:openapi   # Regenerate docs/api/openapi.{en,it,}.json from Zod + i18n
 npm run sync:badges    # Sync Midnight Steel & Brushed Brass README badges from code
@@ -28,8 +28,11 @@ npm run verify         # Full solo-maintainer gate: TypeCheck + ESLint + Biome +
 For the Python Edge Gateway (`project_repo/machine-logs-ml-pipeline/`):
 
 ```bash
+pip install --require-hashes -r project_repo/machine-logs-ml-pipeline/src/requirements-lock.txt
 ruff check project_repo/
 ruff format --check project_repo/
+pip-audit --require-hashes --disable-pip -r project_repo/machine-logs-ml-pipeline/src/requirements-lock.txt
+PYTHONPATH=project_repo/machine-logs-ml-pipeline/src pytest project_repo/machine-logs-ml-pipeline/tests
 ```
 
 ---
@@ -51,6 +54,7 @@ ruff format --check project_repo/
 
 ## GitLab CI, Pre-Commit & Automated Dependency Hygiene
 
-- **Git Pre-Commit Hook (`.husky/pre-commit` + `lint-staged`)**: Automatically runs **ESLint (Airbnb style guide)** and **Biome** on staged TypeScript/React/JSON/CSS files, **Ruff** on staged Python files in `project_repo/`, TypeScript `tsc --noEmit`, and `npm run check:i18n` before every commit.
-- **GitLab CI Pipeline (`.gitlab-ci.yml`)**: Ready-to-run 4-stage pipeline (`quality`, `security`, `test`, `build`) covering ESLint (Airbnb), Biome, Ruff, `tsc`, EN/IT & OpenAPI drift check, `npm audit`, Vitest, Pytest, Vite production build, and Zensical static site build (`pages`).
-- **Automated Dependency Updates (`renovate.json`)**: Weekly grouped non-major updates (low noise for a solo maintainer) plus immediate security vulnerability MRs for npm, Python, and Docker dependencies.
+- **Git Pre-Commit Hook (`.husky/pre-commit` + `lint-staged`)**: Automatically runs **Biome lint** and **ESLint (Airbnb style guide)** on staged TypeScript/React files (the Biome formatter is disabled for TS/TSX, so the hook never reformats code ESLint owns), Biome on JSON/CSS, **Ruff** on staged Python files in `project_repo/`, TypeScript `tsc --noEmit`, and `npm run check:i18n` before every commit.
+- **GitHub Actions & GitLab CI**: Both pipelines install from the committed lockfiles (`npm ci`, hash-verified Python lock) and cover ESLint (Airbnb), Biome, Ruff, `tsc`, EN/IT & OpenAPI drift check, `npm audit`, `pip-audit`, Vitest, Pytest, Vite production build, and the Zensical static site. GitHub Actions run with read-only `contents` permissions.
+- **Route Table Snapshot**: `tests/route_table.test.ts` pins every route and its middleware chain (`requireScope(...)`, rate limits), so a route that loses its protection fails CI until reviewed.
+- **Automated Dependency Updates (`renovate.json`)**: Weekly grouped non-major updates (low noise for a solo maintainer), weekly lockfile maintenance, plus immediate security vulnerability MRs for npm, Python, and Docker dependencies.

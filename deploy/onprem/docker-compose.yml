@@ -49,6 +49,9 @@ services:
       DATABASE_SSL: "false"
       DATABASE_POOL_MAX: ${DATABASE_POOL_MAX:-20}
       API_ENFORCE_AUTH: ${API_ENFORCE_AUTH:-true}
+      # Caddy is the only client of the app (port not published): trust exactly one proxy hop
+      # so rate limits and audit entries see real client IPs.
+      TRUST_PROXY: ${TRUST_PROXY:-1}
       SECRETS_ENCRYPTION_KEY: ${SECRETS_ENCRYPTION_KEY:?Set 64-hex SECRETS_ENCRYPTION_KEY in .env}
       AUTH_ADMIN_EMAIL: ${AUTH_ADMIN_EMAIL:-admin@plant.local}
       AUTH_ADMIN_PASSWORD: ${AUTH_ADMIN_PASSWORD:?Set AUTH_ADMIN_PASSWORD in .env}

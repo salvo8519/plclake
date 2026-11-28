@@ -28,4 +28,4 @@ L'Edge Collector (`src/edge_gateway/collector.py`) normalizza quattro famiglie d
 - **OPC-UA (`opcua`, porta `4840`)**: Siemens S7-1500, Rockwell ControlLogix, Beckhoff, B&R (`asyncua`).
 - **Modbus TCP (`modbus-tcp`, porta `502`)**: flussimetri gas, compressori, analizzatori di rete (`pymodbus`, notazione `HR:40001` con `scale_factor`).
 - **MQTT Sparkplug B (`mqtt-sparkplug`, porta `8883`)**: broker OT con sottoscrizione asincrona (`paho-mqtt`).
-- **HTTP/REST Smart Meter (`http-rest-meter`, porta `8080/443`)**: contatori intelligenti con endpoint JSON.
+- **HTTP/REST Smart Meter (`http-rest-meter`, porta `8080/443`)**: contatori intelligenti con endpoint JSON. HTTPS si sceglie in modo esplicito per ogni connessione (**Usa HTTPS (TLS)**, su qualsiasi porta, ad esempio `8443`); il token bearer del contatore non viene mai inviato su HTTP in chiaro.
