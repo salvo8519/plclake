@@ -1,8 +1,19 @@
 import type { Router } from 'express';
-import { ConnectionUpsertPermissiveSchema, ConnectionUpsertStrictSchema, formatZodIssues, NetworkSettingsPermissiveSchema, NetworkSettingsStrictSchema, ScopedKeyRotateRequestSchema } from '../../apiSchemas.ts';
+import {
+  ConnectionUpsertPermissiveSchema,
+  ConnectionUpsertStrictSchema,
+  formatZodIssues,
+  NetworkSettingsPermissiveSchema,
+  NetworkSettingsStrictSchema,
+  ScopedKeyRotateRequestSchema,
+} from '../../apiSchemas.ts';
 import { resolveMachineSpec } from '../../machineCatalog.ts';
 import type { NetworkDeploymentSettings, PlcConnection } from '../../types/pipeline.ts';
-import { getRequestContext, logInternalError, normalizePermissiveConnectionInput } from '../requestInput.ts';
+import {
+  getRequestContext,
+  logInternalError,
+  normalizePermissiveConnectionInput,
+} from '../requestInput.ts';
 import type { HttpContext } from '../context.ts';
 
 /** Plant OT/IT connections: network settings, gateway and scoped key rotation, endpoints, probes, test batches and the on-premise deploy bundle. */

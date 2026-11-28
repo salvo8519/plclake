@@ -1,5 +1,11 @@
 import type { Router } from 'express';
-import { formatZodIssues, PlcCatalogUpsertPermissiveSchema, PlcCatalogUpsertStrictSchema, PlcOutputPreviewRequestSchema, projectRowFields } from '../../apiSchemas.ts';
+import {
+  formatZodIssues,
+  PlcCatalogUpsertPermissiveSchema,
+  PlcCatalogUpsertStrictSchema,
+  PlcOutputPreviewRequestSchema,
+  projectRowFields,
+} from '../../apiSchemas.ts';
 import type { PlcCatalogProfile } from '../../types/pipeline.ts';
 import { getRequestContext, logInternalError } from '../requestInput.ts';
 import type { HttpContext } from '../context.ts';

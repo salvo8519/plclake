@@ -1,6 +1,11 @@
 import type { Express, Request, Response, Router } from 'express';
 import { generateOpenApiSpec } from '../../apiSchemas.ts';
-import { API_CONTRACT, APP_NAME, APP_VERSION, buildRuntimeVersionInfo } from '../../config/appMeta.ts';
+import {
+  API_CONTRACT,
+  APP_NAME,
+  APP_VERSION,
+  buildRuntimeVersionInfo,
+} from '../../config/appMeta.ts';
 import { resolveSiteId } from '../../logger.ts';
 import { metricsRegistry } from '../../observability.ts';
 import { extractRequestCredential } from '../../security.ts';
