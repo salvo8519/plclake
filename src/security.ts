@@ -4,6 +4,7 @@ import fs from 'node:fs/promises';
 import net from 'node:net';
 import path from 'node:path';
 import { isProductionRuntime } from './config/runtimeEnv.ts';
+import { withName } from './utils/asyncRouter.ts';
 import type { NextFunction, Request, Response } from 'express';
 
 export type ApiAuthScope = 'edge' | 'read' | 'admin';
@@ -497,7 +498,7 @@ export function createRateLimiter(options: {
 }) {
   const buckets = new Map<string, RateBucket>();
 
-  return (req: Request, res: Response, next: NextFunction): void => {
+  const limiter = (req: Request, res: Response, next: NextFunction): void => {
     const now = Date.now();
     const clientIp = req.ip || req.socket.remoteAddress || 'unknown';
     const key = `${options.keyPrefix}:${clientIp}`;
@@ -532,4 +533,5 @@ export function createRateLimiter(options: {
 
     next();
   };
+  return withName(limiter, `rateLimit(${options.keyPrefix})`);
 }

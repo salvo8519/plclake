@@ -8,7 +8,7 @@ function forwardRejections(handler: unknown): unknown {
   // Leave paths, arrays, routers and error handlers (arity 4) untouched.
   if (typeof handler !== 'function' || handler.length === 4) return handler;
   const fn = handler as (req: Request, res: Response, next: NextFunction) => unknown;
-  return function asyncSafeHandler(req: Request, res: Response, next: NextFunction) {
+  const wrapped = function asyncSafeHandler(req: Request, res: Response, next: NextFunction) {
     try {
       const result = fn(req, res, next);
       if (result && typeof (result as Promise<unknown>).then === 'function') {
@@ -18,6 +18,15 @@ function forwardRejections(handler: unknown): unknown {
       next(err);
     }
   };
+  // Keep the original name so route introspection (and the route-table snapshot) still shows
+  // which middleware protects each route.
+  return withName(wrapped, fn.name || 'anonymous');
+}
+
+/** Gives a function a stable, descriptive name (e.g. `requireScope(admin)`) for introspection. */
+export function withName<T extends (...args: never[]) => unknown>(fn: T, name: string): T {
+  Object.defineProperty(fn, 'name', { value: name, configurable: true });
+  return fn;
 }
 
 /**

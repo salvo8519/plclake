@@ -64,7 +64,7 @@ import {
 } from './src/serverConfig.ts';
 import { SimulationRunManager } from './src/simulationRunner.ts';
 import { atomicWriteJson, flushPendingWrites, sanitizeCsvCell } from './src/utils/persistence.ts';
-import { createJsonErrorHandler, forwardAsyncErrors } from './src/utils/asyncRouter.ts';
+import { createJsonErrorHandler, forwardAsyncErrors, withName } from './src/utils/asyncRouter.ts';
 import {
   collectProductionConfigErrors,
   isProductionRuntime,
@@ -393,7 +393,8 @@ export async function createApp(options: CreateAppOptions = {}) {
     return { actor: 'console-anonymous', actorRole: 'anonymous', sessionUser: null };
   };
 
-  const requireScope = (scope: ApiAuthScope) => (req: Request, res: Response, next: express.NextFunction) => {
+  const requireScope = (scope: ApiAuthScope) =>
+    withName((req: Request, res: Response, next: express.NextFunction) => {
     const { requestId, tier } = getRequestContext(req, res);
     const credential = extractRequestCredential(req);
 
@@ -489,7 +490,7 @@ export async function createApp(options: CreateAppOptions = {}) {
     }
     res.setHeader('X-Auth-Scope', auth.grantedScope);
     next();
-  };
+    }, `requireScope(${scope})`);
 
   /**
    * Unexpected failures inside a handler: full detail goes to the server log (correlated by
