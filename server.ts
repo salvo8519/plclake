@@ -129,6 +129,8 @@ function normalizePermissiveConnectionInput(raw: Record<string, unknown>): Parti
     host: typeof raw.host === 'string' ? raw.host : undefined,
     port: raw.port !== undefined ? Number(raw.port) : undefined,
     endpointOrTopic: typeof raw.endpointOrTopic === 'string' ? raw.endpointOrTopic : undefined,
+    useTls:
+      typeof raw.useTls === 'boolean' ? raw.useTls : typeof raw.use_tls === 'boolean' ? raw.use_tls : undefined,
     pollIntervalSec:
       raw.pollIntervalSec !== undefined
         ? (Number(raw.pollIntervalSec) as PlcConnection['pollIntervalSec'])
@@ -292,8 +294,9 @@ export async function createApp(options: CreateAppOptions = {}) {
       });
       return;
     }
-    const storage = await dbStore.getHealthStatus();
-    if (dbStore.isConfigured() && !storage.connected) {
+    // Readiness must stay O(1): a ping, never a table scan (probes run every few seconds).
+    const dbConnected = dbStore.isConfigured() ? await dbStore.ping() : false;
+    if (dbStore.isConfigured() && !dbConnected) {
       res.status(503).json({
         status: 'database_unavailable',
         name: APP_NAME,
@@ -308,8 +311,8 @@ export async function createApp(options: CreateAppOptions = {}) {
       name: APP_NAME,
       version: APP_VERSION,
       siteId: resolveSiteId(),
-      storageMode: storage.mode,
-      dbConnected: storage.connected,
+      storageMode: dbStore.isPostgresActive() ? 'postgres' : 'file-fallback',
+      dbConnected,
       timestamp: new Date().toISOString(),
     });
   });
@@ -486,6 +489,19 @@ export async function createApp(options: CreateAppOptions = {}) {
     }
     res.setHeader('X-Auth-Scope', auth.grantedScope);
     next();
+  };
+
+  /**
+   * Unexpected failures inside a handler: full detail goes to the server log (correlated by
+   * requestId); the client only gets the handler's generic message, never internal paths,
+   * driver errors or stack traces.
+   */
+  const logInternalError = (err: unknown, context: string, requestId: string | null): void => {
+    logger.error('system', context, {
+      requestId,
+      error: err instanceof Error ? err.message : String(err),
+      stack: err instanceof Error ? err.stack : undefined,
+    });
   };
 
   const apiRouter = forwardAsyncErrors(express.Router());
@@ -1145,8 +1161,9 @@ export async function createApp(options: CreateAppOptions = {}) {
       });
       res.status(outcome.status === 'sent' ? 200 : 502).json({ outcome });
     } catch (err) {
+      logInternalError(err, 'Alert channel test failed', requestId);
       res.status(500).json({
-        error: err instanceof Error ? err.message : 'Alert channel test failed',
+        error: 'Alert channel test failed',
         tier,
         requestId,
       });
@@ -1205,8 +1222,9 @@ export async function createApp(options: CreateAppOptions = {}) {
       });
       res.status(result.outcome.status === 'sent' ? 200 : 502).json(result);
     } catch (err) {
+      logInternalError(err, 'SMTP diagnostic send failed', requestId);
       res.status(500).json({
-        error: err instanceof Error ? err.message : 'SMTP diagnostic send failed',
+        error: 'SMTP diagnostic send failed',
         tier,
         requestId,
       });
@@ -1275,8 +1293,9 @@ export async function createApp(options: CreateAppOptions = {}) {
       );
       res.status(saved.created ? 201 : 200).json(saved);
     } catch (err) {
+      logInternalError(err, 'Failed to save PLC catalog profile', requestId);
       res.status(500).json({
-        error: err instanceof Error ? err.message : 'Failed to save PLC catalog profile',
+        error: 'Failed to save PLC catalog profile',
         tier,
         requestId,
       });
@@ -1293,8 +1312,9 @@ export async function createApp(options: CreateAppOptions = {}) {
       }
       res.json(removed);
     } catch (err) {
+      logInternalError(err, 'Failed to remove PLC catalog profile', requestId);
       res.status(500).json({
-        error: err instanceof Error ? err.message : 'Failed to remove PLC catalog profile',
+        error: 'Failed to remove PLC catalog profile',
         tier,
         requestId,
       });
@@ -1448,8 +1468,9 @@ export async function createApp(options: CreateAppOptions = {}) {
         updatedAt: jobConfigUpdatedAt,
       });
     } catch (err) {
+      logInternalError(err, 'Unable to save job configuration', requestId);
       res.status(500).json({
-        error: err instanceof Error ? err.message : 'Unable to save job configuration',
+        error: 'Unable to save job configuration',
         tier,
         requestId,
       });
@@ -1544,8 +1565,9 @@ export async function createApp(options: CreateAppOptions = {}) {
 
       res.status(202).json(result);
     } catch (err) {
+      logInternalError(err, 'Batch ingestion failed', requestId);
       res.status(500).json({
-        error: err instanceof Error ? err.message : 'Batch ingestion failed',
+        error: 'Batch ingestion failed',
         tier,
         requestId,
       });
@@ -1575,8 +1597,9 @@ export async function createApp(options: CreateAppOptions = {}) {
       );
       res.json(updated);
     } catch (err) {
+      logInternalError(err, 'Failed to update network deployment settings', requestId);
       res.status(500).json({
-        error: err instanceof Error ? err.message : 'Failed to update network deployment settings',
+        error: 'Failed to update network deployment settings',
         tier,
         requestId,
       });
@@ -1589,8 +1612,9 @@ export async function createApp(options: CreateAppOptions = {}) {
       const rotated = await connectionManager.rotateGatewayToken();
       res.json(rotated);
     } catch (err) {
+      logInternalError(err, 'Failed to rotate gateway token', requestId);
       res.status(500).json({
-        error: err instanceof Error ? err.message : 'Failed to rotate gateway token',
+        error: 'Failed to rotate gateway token',
         tier,
         requestId,
       });
@@ -1613,8 +1637,9 @@ export async function createApp(options: CreateAppOptions = {}) {
       const rotated = await connectionManager.rotateScopedKey(parsed.data.scope);
       res.json(rotated);
     } catch (err) {
+      logInternalError(err, 'Failed to rotate scoped API key', requestId);
       res.status(500).json({
-        error: err instanceof Error ? err.message : 'Failed to rotate scoped API key',
+        error: 'Failed to rotate scoped API key',
         tier,
         requestId,
       });
@@ -1642,8 +1667,9 @@ export async function createApp(options: CreateAppOptions = {}) {
       const saved = await connectionManager.upsertConnection(payload);
       res.status(payload.id ? 200 : 201).json(saved);
     } catch (err) {
+      logInternalError(err, 'Failed to save connection', requestId);
       res.status(500).json({
-        error: err instanceof Error ? err.message : 'Failed to save connection',
+        error: 'Failed to save connection',
         tier,
         requestId,
       });
@@ -1660,8 +1686,9 @@ export async function createApp(options: CreateAppOptions = {}) {
       }
       res.json(removed);
     } catch (err) {
+      logInternalError(err, 'Failed to delete connection', requestId);
       res.status(500).json({
-        error: err instanceof Error ? err.message : 'Failed to delete connection',
+        error: 'Failed to delete connection',
         tier,
         requestId,
       });
@@ -1678,8 +1705,9 @@ export async function createApp(options: CreateAppOptions = {}) {
       }
       res.json({ probe, state: connectionManager.getPublicState() });
     } catch (err) {
+      logInternalError(err, 'Connection probe failed', requestId);
       res.status(500).json({
-        error: err instanceof Error ? err.message : 'Connection probe failed',
+        error: 'Connection probe failed',
         tier,
         requestId,
       });
@@ -1738,8 +1766,9 @@ export async function createApp(options: CreateAppOptions = {}) {
         state: connectionManager.getPublicState(),
       });
     } catch (err) {
+      logInternalError(err, 'Test batch dispatch failed', requestId);
       res.status(500).json({
-        error: err instanceof Error ? err.message : 'Test batch dispatch failed',
+        error: 'Test batch dispatch failed',
         tier,
         requestId,
       });
@@ -1948,8 +1977,9 @@ export async function createApp(options: CreateAppOptions = {}) {
       });
       res.status(201).json(snapshot);
     } catch (err) {
+      logInternalError(err, 'Unable to start streaming simulation', requestId);
       res.status(500).json({
-        error: err instanceof Error ? err.message : 'Unable to start streaming simulation',
+        error: 'Unable to start streaming simulation',
         tier,
         requestId,
       });

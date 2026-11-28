@@ -362,9 +362,14 @@ def poll_http_rest_meter(
     auth_mode: str,
     tag_bindings: list[Any],
     timeout_sec: float = 2.5,
+    use_tls: bool | None = None,
 ) -> dict[str, Any]:
-    """Poll HTTP/HTTPS smart meters with optional Bearer token auth & dot-path extraction."""
-    scheme = "https" if port == 443 else "http"
+    """Poll HTTP/HTTPS smart meters with optional Bearer token auth & dot-path extraction.
+
+    ``use_tls`` comes from the console connection; ``None`` (legacy configuration without the
+    field) keeps the previous rule: HTTPS only on port 443.
+    """
+    scheme = "https" if (use_tls if use_tls is not None else port == 443) else "http"
     suffix = endpoint_or_topic if endpoint_or_topic.startswith("/") else f"/{endpoint_or_topic}"
     url = f"{scheme}://{host}:{port}{suffix}"
     headers = {"Accept": "application/json"}
@@ -379,7 +384,7 @@ def poll_http_rest_meter(
             if scheme != "https" and not allow_plaintext:
                 raise ValueError(
                     f"Refusing to send bearer token over plain HTTP to {host}:{port}; "
-                    "use port 443 (HTTPS) or set EDGE_HTTP_METER_ALLOW_PLAINTEXT_TOKEN=true"
+                    "enable TLS on the connection (useTls) or set EDGE_HTTP_METER_ALLOW_PLAINTEXT_TOKEN=true"
                 )
             headers["Authorization"] = f"Bearer {meter_token}"
 

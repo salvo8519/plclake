@@ -13,11 +13,17 @@ Hardening release (issue #2). No new features.
 - Login hashing is asynchronous and constant-cost for unknown accounts (no event-loop blocking, no user enumeration by timing). Password changes revoke existing sessions; short passwords are rejected instead of silently ignored.
 - Edge gateway never sends the HTTP meter bearer token over plain HTTP unless `EDGE_HTTP_METER_ALLOW_PLAINTEXT_TOKEN=true`.
 - CI runs with `contents: read` permissions; actions upgraded to the Node 24 runtime.
+- Outbound webhook, Mailpit, SMTP and HTTP meter probes connect only to the DNS addresses already approved by the SSRF policy (closes the DNS rebinding window); TLS still verifies the configured host name.
+- Content-Security-Policy in production (strict `default-src 'none'` on API responses, `'self'`-based policy for the console) and HSTS over TLS. The Scalar API reference is excluded because it loads from a CDN.
+- Unexpected handler failures return the handler's generic message; internal error details are logged with the request id instead of being sent to the client.
+- HTTP REST meters have an explicit `useTls` flag (HTTPS on any port, e.g. 8443); legacy records keep the previous port-443 rule. The console locks the "trusted LAN" option when the server environment enforces authentication.
 
 ### Fixed
 - Unhandled errors in async API handlers no longer crash the process: they return a generic JSON 500 (details logged server-side); malformed JSON returns 400.
 - PostgreSQL configured but unreachable at boot: the app retries with backoff and then fails to start, instead of silently running on ephemeral local files. `/readyz` returns 503 while the database is unavailable.
 - Continuous ingestion no longer grows memory and per-batch CPU without bound: aggregation windows are capped and evicted with exact cumulative counters.
+- Readiness probes use `SELECT 1`; the feature row count uses the planner estimate on large tables instead of a full `COUNT(*)` on every probe and metrics scrape.
+- Late events for aggregation windows already evicted from memory are counted in `lateEventsDropped` instead of re-creating the window and counting it twice.
 - Deduplication keeps remembering recent events across its size limit (two-generation set instead of `clear()`).
 - Edge spool: batches permanently rejected (HTTP 400/422) move to a dead-letter table instead of blocking all later telemetry; HTTP 413 splits the batch.
 

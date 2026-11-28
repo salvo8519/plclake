@@ -54,6 +54,8 @@ class ConnectionSpec:
     endpoint_or_topic: str
     poll_interval_sec: float = 5.0
     auth_mode: str = "anonymous"
+    # HTTP REST meters: explicit TLS flag from the console. None = legacy config (port 443 rule).
+    use_tls: bool | None = None
     domain: str | None = None
     tag_bindings: list[TagBinding] = field(default_factory=list)
 
@@ -125,6 +127,7 @@ def parse_connections_payload(raw: dict[str, Any]) -> tuple[dict[str, Any], list
                 endpoint_or_topic=str(item.get("endpoint_or_topic", "/")),
                 poll_interval_sec=float(item.get("poll_interval_sec", 5.0)),
                 auth_mode=str(item.get("auth_mode", "anonymous")),
+                use_tls=item["use_tls"] if isinstance(item.get("use_tls"), bool) else None,
                 domain=str(item["domain"]) if item.get("domain") else None,
                 tag_bindings=bindings,
             )
@@ -363,6 +366,7 @@ def poll_connection(conn: ConnectionSpec, timeout_sec: float = 2.5) -> dict[str,
             auth_mode=conn.auth_mode,
             tag_bindings=conn.tag_bindings,
             timeout_sec=timeout_sec,
+            use_tls=conn.use_tls,
         )
 
     if conn.protocol == "modbus-tcp":

@@ -1,4 +1,5 @@
 import crypto from 'node:crypto';
+import net from 'node:net';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import nodemailer from 'nodemailer';
@@ -12,6 +13,7 @@ import {
   resolveSecretsMasterKey,
   validateOutboundHost,
 } from './security.ts';
+import { fetchPinned } from './utils/outboundHttp.ts';
 import { atomicWriteJson } from './utils/persistence.ts';
 import type {
   AlertChannelType,
@@ -37,25 +39,31 @@ import type {
 
 async function validateMailpitApiUrl(
   rawUrl: string
-): Promise<{ allowed: boolean; normalizedUrl: string; reason?: string }> {
+): Promise<{ allowed: boolean; normalizedUrl: string; reason?: string; addresses: string[] }> {
   const trimmed = rawUrl.trim().replace(/\/+$/, '');
   if (!trimmed) {
-    return { allowed: false, normalizedUrl: '', reason: 'Mailpit Web UI / API URL is empty.' };
+    return { allowed: false, normalizedUrl: '', reason: 'Mailpit Web UI / API URL is empty.', addresses: [] };
   }
   let parsed: URL;
   try {
     parsed = new URL(trimmed);
   } catch {
-    return { allowed: false, normalizedUrl: trimmed, reason: 'Invalid Mailpit URL format.' };
+    return { allowed: false, normalizedUrl: trimmed, reason: 'Invalid Mailpit URL format.', addresses: [] };
   }
   if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
-    return { allowed: false, normalizedUrl: trimmed, reason: 'Mailpit URL must use http:// or https://.' };
+    return {
+      allowed: false,
+      normalizedUrl: trimmed,
+      reason: 'Mailpit URL must use http:// or https://.',
+      addresses: [],
+    };
   }
   if (parsed.username || parsed.password) {
     return {
       allowed: false,
       normalizedUrl: trimmed,
       reason: 'Mailpit URL must not embed credentials.',
+      addresses: [],
     };
   }
 
@@ -65,10 +73,15 @@ async function validateMailpitApiUrl(
       allowed: false,
       normalizedUrl: trimmed,
       reason: `SSRF_BLOCKED: ${hostCheck.reason ?? 'Disallowed Mailpit host.'}`,
+      addresses: [],
     };
   }
 
-  return { allowed: true, normalizedUrl: `${parsed.origin}${parsed.pathname}`.replace(/\/+$/, '') };
+  return {
+    allowed: true,
+    normalizedUrl: `${parsed.origin}${parsed.pathname}`.replace(/\/+$/, ''),
+    addresses: hostCheck.addresses,
+  };
 }
 
 function formatMailpitAddress(addr?: MailpitAddress | null): string {
@@ -554,13 +567,18 @@ export class AlertEngine {
     return ev;
   }
 
-  private createSmtpTransporter() {
+  /**
+   * @param validatedAddresses addresses approved by the SSRF policy: the transport connects to
+   * the first one, while TLS still verifies the certificate against the configured host name.
+   */
+  private createSmtpTransporter(validatedAddresses: readonly string[]) {
+    const configuredHost = this.state.smtp.host.trim();
     const rejectUnauthorized = this.state.smtp.secure
       ? process.env.SMTP_TLS_REJECT_UNAUTHORIZED !== 'false'
       : process.env.SMTP_TLS_REJECT_UNAUTHORIZED === 'true';
 
     return nodemailer.createTransport({
-      host: this.state.smtp.host,
+      host: validatedAddresses[0] ?? configuredHost,
       port: this.state.smtp.port,
       secure: this.state.smtp.secure,
       connectionTimeout: 4000,
@@ -576,6 +594,8 @@ export class AlertEngine {
         : {}),
       tls: {
         rejectUnauthorized,
+        // SNI and certificate verification use the configured name, not the pinned IP.
+        ...(net.isIP(configuredHost) ? {} : { servername: configuredHost }),
       },
     });
   }
@@ -611,7 +631,7 @@ export class AlertEngine {
     }
 
     try {
-      const transporter = this.createSmtpTransporter();
+      const transporter = this.createSmtpTransporter(smtpHostCheck.addresses);
       await transporter.verify();
       return {
         reachable: true,
@@ -703,7 +723,7 @@ export class AlertEngine {
     }
 
     try {
-      const transporter = this.createSmtpTransporter();
+      const transporter = this.createSmtpTransporter(smtpHostCheck.addresses);
       const info = await transporter.sendMail({
         from: this.state.smtp.fromAddress,
         to: recipients.join(', '),
@@ -765,12 +785,12 @@ export class AlertEngine {
     }
 
     try {
-      const infoResp = await fetch(`${validation.normalizedUrl}/api/v1/info`, {
+      const infoResp = await fetchPinned(`${validation.normalizedUrl}/api/v1/info`, {
         method: 'GET',
         headers: { Accept: 'application/json' },
         redirect: 'error',
         signal: AbortSignal.timeout(4000),
-      });
+      }, validation.addresses);
 
       if (infoResp.ok) {
         const info = (await infoResp.json()) as {
@@ -811,12 +831,12 @@ export class AlertEngine {
 
       // Fallback to /api/v1/messages?limit=1 if /api/v1/info is unavailable on an older Mailpit build
       if (infoResp.status === 404) {
-        const msgResp = await fetch(`${validation.normalizedUrl}/api/v1/messages?limit=1`, {
+        const msgResp = await fetchPinned(`${validation.normalizedUrl}/api/v1/messages?limit=1`, {
           method: 'GET',
           headers: { Accept: 'application/json' },
           redirect: 'error',
           signal: AbortSignal.timeout(4000),
-        });
+        }, validation.addresses);
         if (msgResp.ok) {
           const raw = (await msgResp.json()) as { total?: number; unread?: number };
           return {
@@ -898,12 +918,12 @@ export class AlertEngine {
       : `${validation.normalizedUrl}/api/v1/messages?limit=${limit}`;
 
     try {
-      const resp = await fetch(endpoint, {
+      const resp = await fetchPinned(endpoint, {
         method: 'GET',
         headers: { Accept: 'application/json' },
         redirect: 'error',
         signal: AbortSignal.timeout(4000),
-      });
+      }, validation.addresses);
       if (!resp.ok) {
         return {
           reachable: false,
@@ -1003,15 +1023,14 @@ export class AlertEngine {
     }
 
     try {
-      const msgResp = await fetch(
+      const msgResp = await fetchPinned(
         `${validation.normalizedUrl}/api/v1/message/${encodeURIComponent(safeId)}`,
         {
           method: 'GET',
           headers: { Accept: 'application/json' },
           redirect: 'error',
           signal: AbortSignal.timeout(4000),
-        }
-      );
+        }, validation.addresses);
       if (!msgResp.ok) {
         return {
           reachable: false,
@@ -1040,15 +1059,14 @@ export class AlertEngine {
         raw.Headers && typeof raw.Headers === 'object' ? raw.Headers : {};
       if (Object.keys(headers).length === 0) {
         try {
-          const hdrResp = await fetch(
+          const hdrResp = await fetchPinned(
             `${validation.normalizedUrl}/api/v1/message/${encodeURIComponent(safeId)}/headers`,
             {
               method: 'GET',
               headers: { Accept: 'application/json' },
               redirect: 'error',
               signal: AbortSignal.timeout(2500),
-            }
-          );
+            }, validation.addresses);
           if (hdrResp.ok) {
             const parsedHdr = (await hdrResp.json()) as Record<string, string[]>;
             if (parsedHdr && typeof parsedHdr === 'object') {
@@ -1106,13 +1124,13 @@ export class AlertEngine {
     }
 
     try {
-      const resp = await fetch(`${validation.normalizedUrl}/api/v1/messages`, {
+      const resp = await fetchPinned(`${validation.normalizedUrl}/api/v1/messages`, {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({}),
         redirect: 'error',
         signal: AbortSignal.timeout(4000),
-      });
+      }, validation.addresses);
       if (!resp.ok) {
         return {
           cleared: false,
@@ -1164,7 +1182,7 @@ export class AlertEngine {
     }
 
     try {
-      const transporter = this.createSmtpTransporter();
+      const transporter = this.createSmtpTransporter(smtpHostCheck.addresses);
 
       const info = await transporter.sendMail({
         from: this.state.smtp.fromAddress,
@@ -1259,13 +1277,13 @@ export class AlertEngine {
     }
 
     try {
-      const resp = await fetch(targetUrl, {
+      const resp = await fetchPinned(targetUrl, {
         method: 'POST',
         headers,
         body: bodyStr,
         redirect: 'error',
         signal: AbortSignal.timeout(this.state.webhook.timeoutMs),
-      });
+      }, hostCheck.addresses);
       if (!resp.ok) {
         metricsRegistry.recordAlertDelivery('webhook', 'failed');
         logger.warn('alerting', 'Webhook alert returned non-2xx HTTP status', {

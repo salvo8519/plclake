@@ -10,9 +10,16 @@ import {
   isApiAuthEnforced,
   resolveTrustProxySetting,
 } from '../src/config/runtimeEnv.ts';
+import { ConnectionManager } from '../src/connectionManager.ts';
 import { DatabaseStore } from '../src/db.ts';
 import { StructuredLogger } from '../src/logger.ts';
-import { validateOutboundHost } from '../src/security.ts';
+import {
+  API_CONTENT_SECURITY_POLICY,
+  APP_CONTENT_SECURITY_POLICY,
+  HSTS_HEADER_VALUE,
+  securityHeadersMiddleware,
+  validateOutboundHost,
+} from '../src/security.ts';
 import { SimulationRunManager } from '../src/simulationRunner.ts';
 import { createJsonErrorHandler, forwardAsyncErrors } from '../src/utils/asyncRouter.ts';
 import { BoundedRecentSet } from '../src/utils/boundedRecentSet.ts';
@@ -262,6 +269,89 @@ describe('Database availability', () => {
   });
 });
 
+describe('Security headers', () => {
+  const buildApp = () => {
+    const app = express();
+    app.set('trust proxy', true);
+    app.use(securityHeadersMiddleware);
+    app.get('*', (_req, res) => {
+      res.send('ok');
+    });
+    return app;
+  };
+  let restoreEnv: (() => void) | null = null;
+  afterEach(() => {
+    restoreEnv?.();
+    restoreEnv = null;
+  });
+
+  it('applies the app CSP, the strict API CSP, and skips the Scalar docs in production', async () => {
+    restoreEnv = withEnv({ NODE_ENV: 'production' });
+    const app = buildApp();
+    expect((await request(app).get('/')).headers['content-security-policy']).toBe(APP_CONTENT_SECURITY_POLICY);
+    expect((await request(app).get('/api/v1/version')).headers['content-security-policy']).toBe(
+      API_CONTENT_SECURITY_POLICY
+    );
+    expect((await request(app).get('/api/v1/docs')).headers['content-security-policy']).toBeUndefined();
+  });
+
+  it('sends HSTS only over TLS and never outside production', async () => {
+    restoreEnv = withEnv({ NODE_ENV: 'production' });
+    const app = buildApp();
+    expect((await request(app).get('/')).headers['strict-transport-security']).toBeUndefined();
+    const overTls = await request(app).get('/').set('X-Forwarded-Proto', 'https');
+    expect(overTls.headers['strict-transport-security']).toBe(HSTS_HEADER_VALUE);
+
+    restoreEnv();
+    restoreEnv = withEnv({ NODE_ENV: 'development' });
+    const dev = await request(buildApp()).get('/').set('X-Forwarded-Proto', 'https');
+    expect(dev.headers['content-security-policy']).toBeUndefined();
+    expect(dev.headers['strict-transport-security']).toBeUndefined();
+  });
+});
+
+describe('Storage probes stay cheap on large tables', () => {
+  const makePool = (estimate: string) => {
+    const queries: string[] = [];
+    const pool = {
+      query: async (sql: string) => {
+        queries.push(sql);
+        if (sql.includes('pg_class')) return { rows: [{ estimate }] };
+        if (sql.includes('COUNT(*)')) return { rows: [{ total: '7' }] };
+        return { rows: [] };
+      },
+      end: async () => undefined,
+    };
+    return { pool, queries };
+  };
+
+  it('uses the planner estimate instead of COUNT(*) once the table is large', async () => {
+    const { pool, queries } = makePool('5000000');
+    const store = new DatabaseStore({ databaseUrl: 'postgres://u:p@db:5432/x', pool: pool as never });
+    await store.init();
+    queries.length = 0;
+    const health = await store.getHealthStatus();
+    expect(health.featureRowsStored).toBe(5_000_000);
+    expect(queries.some((q) => q.includes('COUNT(*)'))).toBe(false);
+  });
+
+  it('keeps an exact count for small or never-analyzed tables', async () => {
+    const { pool } = makePool('-1');
+    const store = new DatabaseStore({ databaseUrl: 'postgres://u:p@db:5432/x', pool: pool as never });
+    await store.init();
+    expect((await store.getHealthStatus()).featureRowsStored).toBe(7);
+  });
+
+  it('pings with SELECT 1 for readiness', async () => {
+    const { pool, queries } = makePool('0');
+    const store = new DatabaseStore({ databaseUrl: 'postgres://u:p@db:5432/x', pool: pool as never });
+    await store.init();
+    queries.length = 0;
+    expect(await store.ping()).toBe(true);
+    expect(queries).toEqual(['SELECT 1']);
+  });
+});
+
 describe('Bounded ingestion state', () => {
   it('BoundedRecentSet remembers recent keys across a generation switch', () => {
     const set = new BoundedRecentSet(3);
@@ -297,6 +387,72 @@ describe('Bounded ingestion state', () => {
       .values()
       .next().value;
     expect(run?.windowBuckets.size).toBeLessThanOrEqual(5000);
+
+    // A late event for an already-evicted window must not be counted twice.
+    const late = manager.ingestExternalBatch(
+      [{ ...events[0], event_id: 'evt-late-0', metrics: { temp_c: 60 } }],
+      { windowMinutes: 60 }
+    );
+    expect(late.accepted).toBe(1);
+    const afterLate = manager.getLatestSnapshot();
+    expect(afterLate?.featureRowsCount).toBe(totalWindows);
+    expect(afterLate?.lateEventsDropped).toBe(1);
     manager.stopAllRuns();
+  });
+});
+
+describe('HTTP meter TLS flag (useTls)', () => {
+  let tmpDir: string;
+  afterEach(async () => {
+    if (tmpDir) await fs.rm(tmpDir, { recursive: true, force: true });
+  });
+
+  it('stores an explicit TLS flag on any port and exports it to the edge gateway', async () => {
+    tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'telemetry-usetls-'));
+    const manager = new ConnectionManager(tmpDir);
+    await manager.init();
+    const saved = await manager.upsertConnection({
+      name: 'Meter 8443',
+      machineId: 'GAS-02',
+      protocol: 'http-rest-meter',
+      host: '10.0.0.20',
+      port: 8443,
+      endpointOrTopic: '/api/v1/telemetry',
+      useTls: true,
+      authMode: 'bearer-token',
+    });
+    expect(saved.connection.useTls).toBe(true);
+    const exported = manager.getEdgeSyncConfig().connections.find((c) => c.id === saved.connection.id);
+    expect(exported?.use_tls).toBe(true);
+  });
+
+  it('migrates legacy records without the flag using the previous port-443 rule', async () => {
+    tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'telemetry-usetls-legacy-'));
+    const legacy = (id: string, port: number) => ({
+      id,
+      name: id,
+      machineId: id,
+      lineId: 'line-01',
+      machineType: 'gas-flow-meter',
+      protocol: 'http-rest-meter',
+      deploymentTopology: 'on-premise-lan',
+      host: '10.0.0.30',
+      port,
+      endpointOrTopic: '/data',
+      pollIntervalSec: 5,
+      authMode: 'anonymous',
+      enabled: true,
+      status: 'configured',
+      tagBindings: [{ sourceTag: 'v', targetMetric: 'temp_c', scaleFactor: 1, unit: '' }],
+    });
+    await fs.mkdir(path.join(tmpDir, '.state'), { recursive: true });
+    await fs.writeFile(
+      path.join(tmpDir, '.state', 'connections.json'),
+      JSON.stringify({ connections: [legacy('legacy-443', 443), legacy('legacy-8080', 8080)] })
+    );
+    const manager = new ConnectionManager(tmpDir);
+    await manager.init();
+    const byId = Object.fromEntries(manager.getPublicState().connections.map((c) => [c.id, c.useTls]));
+    expect(byId).toMatchObject({ 'legacy-443': true, 'legacy-8080': false });
   });
 });
